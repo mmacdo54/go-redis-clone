@@ -2,10 +2,9 @@ package main
 
 import (
 	"fmt"
+	grc "github.com/mmacdo54/go-redis-clone/internal"
 	"log"
 	"net"
-
-	grc "github.com/mmacdo54/go-redis-clone/internal"
 )
 
 const (
@@ -23,7 +22,6 @@ func main() {
 
 	for {
 		conn, err := tcp.Accept()
-
 		if err != nil {
 			log.Print(err)
 			continue
@@ -31,14 +29,18 @@ func main() {
 
 		go func(conn net.Conn) {
 			r := grc.NewReader(conn)
-			c, err := r.Read()
+			rv, err := r.Read()
 			if err != nil {
 				conn.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err)))
+				conn.Close()
 			} else {
-				fmt.Println(c)
-				conn.Write([]byte("+OK\r\n"))
+				fmt.Println(rv)
+				err := rv.HandleRespValue(&conn)
+				if err != nil {
+					conn.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err)))
+					conn.Close()
+				}
 			}
-			conn.Close()
 		}(conn)
 	}
 }
