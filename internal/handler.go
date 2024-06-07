@@ -13,7 +13,7 @@ var connectionMutex = sync.RWMutex{}
 type handler func([]RespValue, *net.Conn) error
 
 var (
-	handlers = map[string]handler{"SUBSCRIBE": subscribe, "PUBLISH": publish}
+	handlers = map[string]handler{"SUBSCRIBE": subscribe, "PUBLISH": publish, "PING": ping}
 )
 
 func (rv *RespValue) HandleRespValue(conn *net.Conn) error {
@@ -32,6 +32,15 @@ func (rv *RespValue) HandleRespValue(conn *net.Conn) error {
 	return handler(args, conn)
 }
 
+func ping(ra []RespValue, conn *net.Conn) error {
+	if len(ra) >= 1 {
+		(*conn).Write([]byte("+" + ra[0].Bulk + "\r\n"))
+		return nil
+	}
+	(*conn).Write([]byte("+pong\r\n"))
+	return nil
+}
+
 func subscribe(ra []RespValue, conn *net.Conn) error {
 	if len(ra) != 1 {
 		return fmt.Errorf("SUBSCRIBE is expecting one argument")
@@ -41,6 +50,7 @@ func subscribe(ra []RespValue, conn *net.Conn) error {
 	connectionMutex.Lock()
 	connections[channel] = append(connections[channel], conn)
 	connectionMutex.Unlock()
+	(*conn).Write([]byte(fmt.Sprintf("*3\r\n$9\r\nsubscribe\r\n$9\r\ntest-chan\r\n:1\r\n")))
 	return nil
 }
 
@@ -58,10 +68,7 @@ func publish(ra []RespValue, conn *net.Conn) error {
 	wg.Add(len(cs))
 	for _, c := range cs {
 		go func(c *net.Conn, wg *sync.WaitGroup) {
-			if c != conn {
-				fmt.Println("Sending")
-				(*c).Write([]byte(fmt.Sprintf("*3\r\n$7\r\nmessage\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n", len(channel), channel, len(message), message)))
-			}
+			(*c).Write([]byte(fmt.Sprintf("*3\r\n$7\r\nmessage\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n", len(channel), channel, len(message), message)))
 			wg.Done()
 		}(c, &wg)
 	}

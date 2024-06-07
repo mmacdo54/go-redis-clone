@@ -27,20 +27,27 @@ func main() {
 			continue
 		}
 
-		go func(conn net.Conn) {
-			r := grc.NewReader(conn)
-			rv, err := r.Read()
-			if err != nil {
-				conn.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err)))
-				conn.Close()
-			} else {
-				fmt.Println(rv)
-				err := rv.HandleRespValue(&conn)
+		go func(conn *net.Conn) {
+			for {
+				r := grc.NewReader(*conn)
+				rv, err := r.Read()
 				if err != nil {
-					conn.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err)))
-					conn.Close()
+					fmt.Println(err)
+					(*conn).Write([]byte(fmt.Sprintf("-ERR %s\r\n", err)))
+					(*conn).Close()
+					break
+				} else {
+					fmt.Println(rv)
+					err := rv.HandleRespValue(conn)
+					if err != nil {
+						fmt.Println(err)
+						(*conn).Write([]byte(fmt.Sprintf("-ERR %s\r\n", err)))
+						(*conn).Close()
+						break
+					}
 				}
 			}
-		}(conn)
+			(*conn).Close()
+		}(&conn)
 	}
 }
