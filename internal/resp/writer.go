@@ -1,7 +1,6 @@
 package resp
 
 import (
-	"fmt"
 	"io"
 )
 
@@ -28,8 +27,6 @@ func (w *RespWriter) WriteErrorResp(e error) error {
 
 func (w *RespWriter) WriteResp(v RespValue) error {
 	bytes := v.Marshall()
-
-	fmt.Println(string(bytes))
 
 	if _, err := w.writer.Write(bytes); err != nil {
 		return err

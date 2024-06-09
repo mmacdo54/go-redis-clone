@@ -7,14 +7,18 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mmacdo54/go-redis-clone/internal/resp"
 )
 
-var SETs = map[string]string{}
+type setValue struct {
+	value  string
+	expiry int
+}
+
+var SETs = map[string]setValue{}
 var SETsMU = sync.RWMutex{}
-var HSETs = map[string]map[string]string{}
-var HSETsMU = sync.RWMutex{}
 var connections = map[string][]*net.Conn{}
 var connectionMutex = sync.RWMutex{}
 
@@ -25,11 +29,11 @@ type handlerArgs struct {
 type Handler func(handlerArgs) resp.RespValue
 
 var Handlers = map[string]Handler{
+	"EXISTS":      exists,
 	"SET":         set,
 	"GET":         get,
-	"HSET":        hset,
-	"HGET":        hget,
-	"HGETALL":     hgetAll,
+	"DEL":         del,
+	"PERSIST":     persist,
 	"SUBSCRIBE":   subscribe,
 	"PUBLISH":     publish,
 	"UNSUBSCRIBE": unsubscribe,
@@ -51,18 +55,77 @@ func HandleRespValue(v resp.RespValue, conn *net.Conn) (resp.RespValue, error) {
 	return handler(handlerArgs{args, conn}), nil
 }
 
+func exists(h handlerArgs) resp.RespValue {
+	if len(h.args) == 0 {
+		return resp.RespValue{Type: "error", Str: "ERR no keys passed to 'exists' command"}
+	}
+
+	count := 0
+	for _, k := range h.args {
+		SETsMU.RLock()
+		if _, ok := SETs[k.Bulk]; ok {
+			count++
+		}
+		SETsMU.RUnlock()
+	}
+
+	return resp.RespValue{Type: "integer", Num: count}
+}
+
 func set(h handlerArgs) resp.RespValue {
-	if len(h.args) != 2 {
+	if len(h.args) < 2 {
 		return resp.RespValue{Type: "error", Str: "ERR wrong number of arguments for 'set' command"}
 	}
 
 	key := h.args[0].Bulk
 	value := h.args[1].Bulk
+	var opts setOptions
+	if len(h.args) > 2 {
+		o, err := parseSetOptions(h.args[2:])
+		if err != nil {
+			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+		}
+		opts = o
+	}
 
 	SETsMU.Lock()
-	SETs[key] = value
+	v, exists := SETs[key]
+
+	if opts.nx && exists {
+		SETsMU.Unlock()
+		return resp.RespValue{Type: "null"}
+	}
+
+	if opts.xx && !exists {
+		return resp.RespValue{Type: "null"}
+	}
+
+	s := setValue{value: value}
+
+	if opts.keepttl && exists {
+		s.expiry = v.expiry
+	} else {
+		switch {
+		case opts.ex > 0:
+			s.expiry = opts.ex
+		case opts.px > 0:
+			s.expiry = opts.px
+		case opts.exat > 0:
+			s.expiry = opts.exat
+		case opts.pxat > 0:
+			s.expiry = opts.pxat
+		}
+	}
+
+	SETs[key] = s
 	SETsMU.Unlock()
 
+	if opts.get && !exists {
+		return resp.RespValue{Type: "null"}
+	}
+	if opts.get {
+		return resp.RespValue{Type: "bulk", Bulk: v.value}
+	}
 	return resp.RespValue{Type: "string", Str: "OK"}
 }
 
@@ -81,68 +144,56 @@ func get(h handlerArgs) resp.RespValue {
 		return resp.RespValue{Type: "null"}
 	}
 
-	return resp.RespValue{Type: "bulk", Bulk: value}
-}
+	now := int(time.Now().Unix()) * 1000
 
-func hset(h handlerArgs) resp.RespValue {
-	if len(h.args) != 3 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of arguments for 'hset' command"}
-	}
-	hash := h.args[0].Bulk
-	key := h.args[1].Bulk
-	value := h.args[2].Bulk
-
-	HSETsMU.Lock()
-	if _, ok := HSETs[hash]; !ok {
-		HSETs[hash] = map[string]string{}
-	}
-	HSETs[hash][key] = value
-	HSETsMU.Unlock()
-
-	return resp.RespValue{Type: "string", Str: "OK"}
-}
-
-func hget(h handlerArgs) resp.RespValue {
-	if len(h.args) != 2 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of arguments for 'hget' command"}
-	}
-
-	hash := h.args[0].Bulk
-	key := h.args[1].Bulk
-
-	HSETsMU.RLock()
-	val, ok := HSETs[hash][key]
-	HSETsMU.RUnlock()
-
-	if !ok {
+	if value.expiry > 0 && value.expiry < now {
+		SETsMU.Lock()
+		delete(SETs, key)
+		SETsMU.Unlock()
 		return resp.RespValue{Type: "null"}
 	}
 
-	return resp.RespValue{Type: "bulk", Bulk: val}
+	return resp.RespValue{Type: "bulk", Bulk: value.value}
 }
 
-func hgetAll(h handlerArgs) resp.RespValue {
+func del(h handlerArgs) resp.RespValue {
+	// TODO allow multiple keys
+	if len(h.args) == 0 {
+		return resp.RespValue{Type: "error", Str: "ERR no keys passed to 'del' command"}
+	}
+
+	count := 0
+	for _, k := range h.args {
+		SETsMU.Lock()
+		if _, ok := SETs[k.Bulk]; ok {
+			count++
+			delete(SETs, k.Bulk)
+		}
+		SETsMU.Unlock()
+	}
+
+	return resp.RespValue{Type: "integer", Num: count}
+}
+
+func persist(h handlerArgs) resp.RespValue {
 	if len(h.args) != 1 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of arguments for 'hgetall' command"}
+		return resp.RespValue{Type: "error", Str: "ERR wrong number of args passed to 'persist' command"}
 	}
 
-	hash := h.args[0].Bulk
-
-	HSETsMU.RLock()
-	val, ok := HSETs[hash]
-	HSETsMU.RUnlock()
-
-	if !ok {
-		return resp.RespValue{Type: "null"}
+	key := h.args[0].Bulk
+	SETsMU.RLock()
+	s, ok := SETs[key]
+	if !ok || s.expiry == 0 {
+		return resp.RespValue{Type: "integer", Num: 0}
 	}
+	SETsMU.RUnlock()
 
-	r := resp.RespValue{Type: "array", Array: []resp.RespValue{}}
+	SETsMU.Lock()
+	s.expiry = 0
+	SETs[key] = s
+	SETsMU.Unlock()
 
-	for _, v := range val {
-		r.Array = append(r.Array, resp.RespValue{Type: "bulk", Bulk: v})
-	}
-
-	return r
+	return resp.RespValue{Type: "integer", Num: 1}
 }
 
 func subscribe(h handlerArgs) resp.RespValue {

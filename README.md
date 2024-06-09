@@ -13,9 +13,9 @@ A simple to run basic implementation of a Redis server - this is just for a bit 
 Currently supported Redis Commands
 - SET
 - GET
-- HSET
-- HGET
-- HGETALL
+- EXISTS
+- DEL (Only allows one key ATM)
+- PERSIST
 - SUBSCRIBE (single channel only)
 - PUBLISH
 - UNSUBSCRIBE (channel must be specified)
