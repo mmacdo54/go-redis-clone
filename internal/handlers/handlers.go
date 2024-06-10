@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -17,14 +16,13 @@ type setValue struct {
 	expiry int
 }
 
-var SETs = map[string]setValue{}
-var SETsMU = sync.RWMutex{}
-var connections = map[string][]*net.Conn{}
-var connectionMutex = sync.RWMutex{}
+var sets = map[string]setValue{}
+var setsMU = sync.RWMutex{}
 
 type handlerArgs struct {
-	args []resp.RespValue
-	conn *net.Conn
+	args    []resp.RespValue
+	conn    *net.Conn
+	command string
 }
 type Handler func(handlerArgs) resp.RespValue
 
@@ -34,6 +32,11 @@ var Handlers = map[string]Handler{
 	"GET":         get,
 	"DEL":         del,
 	"PERSIST":     persist,
+	"EXPIRE":      setExpiry,
+	"EXPIREAT":    setExpiry,
+	"PEXPIRE":     setExpiry,
+	"PEXPIREAT":   setExpiry,
+	"EXPIRETIME":  expiretime,
 	"SUBSCRIBE":   subscribe,
 	"PUBLISH":     publish,
 	"UNSUBSCRIBE": unsubscribe,
@@ -52,7 +55,7 @@ func HandleRespValue(v resp.RespValue, conn *net.Conn) (resp.RespValue, error) {
 		return resp.RespValue{}, fmt.Errorf("Invalid command: %s", command)
 	}
 
-	return handler(handlerArgs{args, conn}), nil
+	return handler(handlerArgs{args: args, conn: conn, command: command}), nil
 }
 
 func exists(h handlerArgs) resp.RespValue {
@@ -62,11 +65,11 @@ func exists(h handlerArgs) resp.RespValue {
 
 	count := 0
 	for _, k := range h.args {
-		SETsMU.RLock()
-		if _, ok := SETs[k.Bulk]; ok {
+		setsMU.RLock()
+		if _, ok := sets[k.Bulk]; ok {
 			count++
 		}
-		SETsMU.RUnlock()
+		setsMU.RUnlock()
 	}
 
 	return resp.RespValue{Type: "integer", Num: count}
@@ -79,7 +82,7 @@ func set(h handlerArgs) resp.RespValue {
 
 	key := h.args[0].Bulk
 	value := h.args[1].Bulk
-	var opts setOptions
+	var opts options
 	if len(h.args) > 2 {
 		o, err := parseSetOptions(h.args[2:])
 		if err != nil {
@@ -88,11 +91,11 @@ func set(h handlerArgs) resp.RespValue {
 		opts = o
 	}
 
-	SETsMU.Lock()
-	v, exists := SETs[key]
+	setsMU.RLock()
+	v, exists := sets[key]
+	setsMU.RUnlock()
 
 	if opts.nx && exists {
-		SETsMU.Unlock()
 		return resp.RespValue{Type: "null"}
 	}
 
@@ -117,8 +120,9 @@ func set(h handlerArgs) resp.RespValue {
 		}
 	}
 
-	SETs[key] = s
-	SETsMU.Unlock()
+	setsMU.Lock()
+	sets[key] = s
+	setsMU.Unlock()
 
 	if opts.get && !exists {
 		return resp.RespValue{Type: "null"}
@@ -136,9 +140,9 @@ func get(h handlerArgs) resp.RespValue {
 
 	key := h.args[0].Bulk
 
-	SETsMU.RLock()
-	value, ok := SETs[key]
-	SETsMU.RUnlock()
+	setsMU.RLock()
+	value, ok := sets[key]
+	setsMU.RUnlock()
 
 	if !ok {
 		return resp.RespValue{Type: "null"}
@@ -147,9 +151,9 @@ func get(h handlerArgs) resp.RespValue {
 	now := int(time.Now().Unix()) * 1000
 
 	if value.expiry > 0 && value.expiry < now {
-		SETsMU.Lock()
-		delete(SETs, key)
-		SETsMU.Unlock()
+		setsMU.Lock()
+		delete(sets, key)
+		setsMU.Unlock()
 		return resp.RespValue{Type: "null"}
 	}
 
@@ -157,118 +161,19 @@ func get(h handlerArgs) resp.RespValue {
 }
 
 func del(h handlerArgs) resp.RespValue {
-	// TODO allow multiple keys
 	if len(h.args) == 0 {
 		return resp.RespValue{Type: "error", Str: "ERR no keys passed to 'del' command"}
 	}
 
 	count := 0
 	for _, k := range h.args {
-		SETsMU.Lock()
-		if _, ok := SETs[k.Bulk]; ok {
+		setsMU.Lock()
+		if _, ok := sets[k.Bulk]; ok {
 			count++
-			delete(SETs, k.Bulk)
+			delete(sets, k.Bulk)
 		}
-		SETsMU.Unlock()
+		setsMU.Unlock()
 	}
 
 	return resp.RespValue{Type: "integer", Num: count}
-}
-
-func persist(h handlerArgs) resp.RespValue {
-	if len(h.args) != 1 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of args passed to 'persist' command"}
-	}
-
-	key := h.args[0].Bulk
-	SETsMU.RLock()
-	s, ok := SETs[key]
-	if !ok || s.expiry == 0 {
-		return resp.RespValue{Type: "integer", Num: 0}
-	}
-	SETsMU.RUnlock()
-
-	SETsMU.Lock()
-	s.expiry = 0
-	SETs[key] = s
-	SETsMU.Unlock()
-
-	return resp.RespValue{Type: "integer", Num: 1}
-}
-
-func subscribe(h handlerArgs) resp.RespValue {
-	// TODO HANDLE MULTIPLE CHANNEL ARGUMENTS
-	if len(h.args) != 1 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of arguments for 'subscribe' command"}
-	}
-
-	channel := h.args[0].Bulk
-
-	connectionMutex.Lock()
-	connections[channel] = append(connections[channel], h.conn)
-	connectionMutex.Unlock()
-
-	return resp.RespValue{
-		Type: "array",
-		Array: []resp.RespValue{
-			{Type: "bulk", Bulk: "subscribe"},
-			{Type: "bulk", Bulk: channel},
-			{Type: "integer", Num: 1},
-		},
-	}
-}
-
-func unsubscribe(h handlerArgs) resp.RespValue {
-	// TODO HANDLE NO ARGUMENTS SHOULD UNSUBSCRIBE FROM ALL CHANNELS
-	if len(h.args) != 1 {
-		return resp.RespValue{Type: "error", Str: "ERR 'unsubscribe' requires 1 argument"}
-	}
-
-	channel := h.args[0].Bulk
-	connectionMutex.Lock()
-	connections[channel] = slices.DeleteFunc(connections[channel], func(c *net.Conn) bool {
-		return c == h.conn
-	})
-	connectionMutex.Unlock()
-
-	return resp.RespValue{
-		Type: "array",
-		Array: []resp.RespValue{
-			{Type: "bulk", Bulk: "unsubscribe"},
-			{Type: "bulk", Bulk: "channel"},
-			{Type: "integer", Num: 1},
-		},
-	}
-}
-
-func publish(h handlerArgs) resp.RespValue {
-	if len(h.args) != 2 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of arguments for 'publish' command"}
-	}
-
-	channel := h.args[0].Bulk
-	message := h.args[1].Bulk
-	connectionMutex.RLock()
-	cs := connections[channel]
-	connectionMutex.RUnlock()
-
-	subMessage := resp.RespValue{
-		Type: "array",
-		Array: []resp.RespValue{
-			{Type: "bulk", Bulk: "message"},
-			{Type: "bulk", Bulk: channel},
-			{Type: "bulk", Bulk: message},
-		},
-	}
-	var wg sync.WaitGroup
-	wg.Add(len(cs))
-	for _, c := range cs {
-		go func(c *net.Conn, wg *sync.WaitGroup) {
-			w := resp.NewRespWriter(*c)
-			w.WriteResp(subMessage)
-			wg.Done()
-		}(c, &wg)
-	}
-	wg.Wait()
-	return resp.RespValue{Type: "integer", Num: len(cs)}
 }

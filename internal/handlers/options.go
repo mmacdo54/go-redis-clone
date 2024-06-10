@@ -18,9 +18,11 @@ const (
 	PX      = "PX"
 	EXAT    = "EXAT"
 	PXAT    = "PXAT"
+	LT      = "LT"
+	GT      = "GT"
 )
 
-type setOptions struct {
+type options struct {
 	nx      bool
 	xx      bool
 	keepttl bool
@@ -29,6 +31,8 @@ type setOptions struct {
 	px      int
 	exat    int
 	pxat    int
+	lt      bool
+	gt      bool
 }
 
 type invalidOptionsError struct{}
@@ -37,7 +41,7 @@ func (i invalidOptionsError) Error() string {
 	return "invalid options sent to 'set' command"
 }
 
-func setNXOrXXOption(opts []resp.RespValue, s *setOptions) error {
+func (s *options) setNXOrXXOption(opts []resp.RespValue) error {
 	filteredOptions := []resp.RespValue{}
 
 	for _, opt := range opts {
@@ -64,7 +68,7 @@ func setNXOrXXOption(opts []resp.RespValue, s *setOptions) error {
 	return nil
 }
 
-func setTTLOptions(opts []resp.RespValue, s *setOptions) error {
+func (s *options) setTTLOptions(opts []resp.RespValue) error {
 	filteredOptions := []resp.RespValue{}
 
 	for _, opt := range opts {
@@ -130,26 +134,29 @@ func setTTLOptions(opts []resp.RespValue, s *setOptions) error {
 	return invalidOptionsError{}
 }
 
-func parseSetOptions(opts []resp.RespValue) (setOptions, error) {
-	s := setOptions{}
-	if len(opts) == 0 {
-		return s, nil
+func (s *options) setLTorGTOptions(opts []resp.RespValue) error {
+	filteredOptions := []resp.RespValue{}
+
+	for _, opt := range opts {
+		upper := strings.ToUpper(opt.Bulk)
+		if upper == LT || upper == GT {
+			filteredOptions = append(filteredOptions, opt)
+		}
 	}
 
-	if err := setNXOrXXOption(opts, &s); err != nil {
-
-		return s, err
+	if len(filteredOptions) == 0 {
+		return nil
 	}
 
-	if err := setTTLOptions(opts, &s); err != nil {
-		return s, err
+	if len(filteredOptions) > 1 {
+		return invalidOptionsError{}
 	}
 
-	if slices.ContainsFunc(opts, func(rv resp.RespValue) bool {
-		return strings.ToUpper(rv.Bulk) == GET
-	}) {
-		s.get = true
+	if strings.ToUpper(filteredOptions[0].Bulk) == LT {
+		s.lt = true
+		return nil
 	}
 
-	return s, nil
+	s.gt = true
+	return nil
 }

@@ -14,8 +14,13 @@ Currently supported Redis Commands
 - SET
 - GET
 - EXISTS
-- DEL (Only allows one key ATM)
+- DEL
 - PERSIST
+- EXPIRE
+- EXPIREAT
+- PEXPIRE
+- PEXPIREAT
+- EXPIRETIME
 - SUBSCRIBE (single channel only)
 - PUBLISH
 - UNSUBSCRIBE (channel must be specified)
