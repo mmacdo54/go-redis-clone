@@ -128,13 +128,14 @@ func del(h handlerArgs) resp.RespValue {
 }
 
 func copy(h handlerArgs) resp.RespValue {
-	if len(h.args) != 2 {
+	if len(h.args) == 0 {
 		return resp.RespValue{Type: "error", Str: "ERR wrong number of commands passed to 'copy' command"}
 	}
 
 	key := h.args[0].Bulk
 	newKey := h.args[1].Bulk
-
+	o := parseCopyOptions(h.args)
+	fmt.Println(o.replace)
 	setsMU.RLock()
 	current, oldExists := sets[key]
 	_, newExists := sets[newKey]
@@ -145,6 +146,9 @@ func copy(h handlerArgs) resp.RespValue {
 
 	setsMU.Lock()
 	sets[newKey] = current
+	if o.replace {
+		delete(sets, key)
+	}
 	setsMU.Unlock()
 
 	return resp.RespValue{Type: "integer", Num: 1}

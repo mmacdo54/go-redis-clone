@@ -20,6 +20,7 @@ const (
 	PXAT    = "PXAT"
 	LT      = "LT"
 	GT      = "GT"
+	REPLACE = "REPLACE"
 )
 
 type options struct {
@@ -33,6 +34,8 @@ type options struct {
 	pxat    int
 	lt      bool
 	gt      bool
+	replace bool
+	opts    []resp.RespValue
 }
 
 type invalidOptionsError struct{}
@@ -41,10 +44,14 @@ func (i invalidOptionsError) Error() string {
 	return "invalid options sent to 'set' command"
 }
 
-func (s *options) setNXOrXXOption(opts []resp.RespValue) error {
+func newOptions(opts []resp.RespValue) options {
+	return options{opts: opts}
+}
+
+func (o *options) setNXOrXXOption() error {
 	filteredOptions := []resp.RespValue{}
 
-	for _, opt := range opts {
+	for _, opt := range o.opts {
 		upper := strings.ToUpper(opt.Bulk)
 		if upper == XX || upper == NX {
 			filteredOptions = append(filteredOptions, opt)
@@ -60,18 +67,18 @@ func (s *options) setNXOrXXOption(opts []resp.RespValue) error {
 	}
 
 	if strings.ToUpper(filteredOptions[0].Bulk) == NX {
-		s.nx = true
+		o.nx = true
 		return nil
 	}
 
-	s.xx = true
+	o.xx = true
 	return nil
 }
 
-func (s *options) setTTLOptions(opts []resp.RespValue) error {
+func (o *options) setTTLOptions() error {
 	filteredOptions := []resp.RespValue{}
 
-	for _, opt := range opts {
+	for _, opt := range o.opts {
 		if slices.Contains([]string{KEEPTTL, EX, PX, EXAT, PXAT}, strings.ToUpper(opt.Bulk)) {
 			filteredOptions = append(filteredOptions, opt)
 		}
@@ -88,19 +95,19 @@ func (s *options) setTTLOptions(opts []resp.RespValue) error {
 	opt := strings.ToUpper(filteredOptions[0].Bulk)
 
 	if strings.ToUpper(opt) == KEEPTTL {
-		s.keepttl = true
+		o.keepttl = true
 		return nil
 	}
 
-	i := slices.IndexFunc(opts, func(rv resp.RespValue) bool {
+	i := slices.IndexFunc(o.opts, func(rv resp.RespValue) bool {
 		return strings.ToUpper(rv.Bulk) == opt
 	})
 
-	if len(opts)-1 < i+1 {
+	if len(o.opts)-1 < i+1 {
 		return invalidOptionsError{}
 	}
 
-	t, err := strconv.Atoi(opts[i+1].Bulk)
+	t, err := strconv.Atoi(o.opts[i+1].Bulk)
 
 	if err != nil {
 		return invalidOptionsError{}
@@ -111,22 +118,22 @@ func (s *options) setTTLOptions(opts []resp.RespValue) error {
 	switch opt {
 	case EX:
 		{
-			s.ex = (now + t) * 1000
+			o.ex = (now + t) * 1000
 			return nil
 		}
 	case PX:
 		{
-			s.px = now*1000 + t
+			o.px = now*1000 + t
 			return nil
 		}
 	case EXAT:
 		{
-			s.exat = t * 1000
+			o.exat = t * 1000
 			return nil
 		}
 	case PXAT:
 		{
-			s.pxat = t
+			o.pxat = t
 			return nil
 		}
 	}
@@ -134,10 +141,10 @@ func (s *options) setTTLOptions(opts []resp.RespValue) error {
 	return invalidOptionsError{}
 }
 
-func (s *options) setLTorGTOptions(opts []resp.RespValue) error {
+func (o *options) setLTorGTOptions() error {
 	filteredOptions := []resp.RespValue{}
 
-	for _, opt := range opts {
+	for _, opt := range o.opts {
 		upper := strings.ToUpper(opt.Bulk)
 		if upper == LT || upper == GT {
 			filteredOptions = append(filteredOptions, opt)
@@ -153,10 +160,18 @@ func (s *options) setLTorGTOptions(opts []resp.RespValue) error {
 	}
 
 	if strings.ToUpper(filteredOptions[0].Bulk) == LT {
-		s.lt = true
+		o.lt = true
 		return nil
 	}
 
-	s.gt = true
+	o.gt = true
 	return nil
+}
+
+func (o *options) setReplaceOption() {
+	if slices.ContainsFunc(o.opts, func(rv resp.RespValue) bool {
+		return strings.ToUpper(rv.Bulk) == REPLACE
+	}) {
+		o.replace = true
+	}
 }

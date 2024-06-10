@@ -8,17 +8,16 @@ import (
 )
 
 func parseSetOptions(opts []resp.RespValue) (options, error) {
-	s := options{}
+	s := newOptions(opts)
 	if len(opts) == 0 {
 		return s, nil
 	}
 
-	if err := s.setNXOrXXOption(opts); err != nil {
-
+	if err := s.setNXOrXXOption(); err != nil {
 		return s, err
 	}
 
-	if err := s.setTTLOptions(opts); err != nil {
+	if err := s.setTTLOptions(); err != nil {
 		return s, err
 	}
 
@@ -32,16 +31,16 @@ func parseSetOptions(opts []resp.RespValue) (options, error) {
 }
 
 func parseExpireOptions(opts []resp.RespValue) (options, error) {
-	s := options{}
+	s := newOptions(opts)
 	if len(opts) == 0 {
 		return s, nil
 	}
 
-	if err := s.setNXOrXXOption(opts); err != nil {
+	if err := s.setNXOrXXOption(); err != nil {
 		return s, err
 	}
 
-	if err := s.setLTorGTOptions(opts); err != nil {
+	if err := s.setLTorGTOptions(); err != nil {
 		return s, err
 	}
 
@@ -50,4 +49,10 @@ func parseExpireOptions(opts []resp.RespValue) (options, error) {
 	}
 
 	return s, nil
+}
+
+func parseCopyOptions(opts []resp.RespValue) options {
+	s := newOptions(opts)
+	s.setReplaceOption()
+	return s
 }

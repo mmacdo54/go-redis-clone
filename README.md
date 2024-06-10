@@ -14,6 +14,7 @@ Currently supported Redis Commands
 - GET
 - EXISTS
 - DEL
+- COPY
 - PERSIST
 - EXPIRE
 - EXPIREAT
