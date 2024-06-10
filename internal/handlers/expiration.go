@@ -104,6 +104,7 @@ func expiretime(h handlerArgs) resp.RespValue {
 	setsMU.RLock()
 	v, ok := sets[key]
 	setsMU.RUnlock()
+
 	if !ok {
 		return resp.RespValue{Type: "integer", Num: -2}
 	}
