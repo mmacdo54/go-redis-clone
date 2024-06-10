@@ -15,6 +15,8 @@ Currently supported Redis Commands
 - EXISTS
 - DEL
 - COPY
+- LPUSH
+- LPOP (Only first item for now)
 - PERSIST
 - EXPIRE
 - EXPIREAT

@@ -50,17 +50,16 @@ func setExpiry(h handlerArgs) resp.RespValue {
 		return resp.RespValue{Type: "integer", Num: 0}
 	}
 
-	s := setValue{value: v.value}
 	now := int(time.Now().Unix())
 	switch h.command {
 	case "EXPIRE":
-		s.expiry = (now + expiry) * 1000
+		v.expiry = (now + expiry) * 1000
 	case "EXPIREAT":
-		s.expiry = expiry * 1000
+		v.expiry = expiry * 1000
 	case "PEXPIRE":
-		s.expiry = now*1000 + expiry
+		v.expiry = now*1000 + expiry
 	case "PEXPIREAT":
-		s.expiry = expiry
+		v.expiry = expiry
 	default:
 		return resp.RespValue{
 			Type: "error",
@@ -69,7 +68,7 @@ func setExpiry(h handlerArgs) resp.RespValue {
 	}
 
 	setsMU.Lock()
-	sets[key] = s
+	sets[key] = v
 	setsMU.Unlock()
 
 	return resp.RespValue{Type: "integer", Num: 1}

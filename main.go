@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net"
-	"strings"
 
 	"github.com/mmacdo54/go-redis-clone/internal/handlers"
 	"github.com/mmacdo54/go-redis-clone/internal/resp"
@@ -68,12 +67,7 @@ func handleConnection(conn net.Conn, store *storage.Store) {
 			continue
 		}
 
-		command := strings.ToUpper(val.Array[0].Bulk)
-
-		if command == "SET" || command == "HSET" {
-			store.Write(val)
-		}
-
+		store.Write(val)
 		writer.WriteResp(response)
 	}
 }

@@ -10,8 +10,15 @@ import (
 	"github.com/mmacdo54/go-redis-clone/internal/resp"
 )
 
+const (
+	STRING = "string"
+	LIST   = "list"
+)
+
 type setValue struct {
-	value  string
+	typ    string
+	str    string
+	list   []string
 	expiry int
 }
 
@@ -31,6 +38,8 @@ var Handlers = map[string]Handler{
 	"GET":         get,
 	"DEL":         del,
 	"COPY":        copy,
+	"LPUSH":       lpush,
+	"LPOP":        lpop,
 	"PERSIST":     persist,
 	"EXPIRE":      setExpiry,
 	"EXPIREAT":    setExpiry,
