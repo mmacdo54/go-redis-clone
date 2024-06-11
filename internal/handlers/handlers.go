@@ -39,6 +39,7 @@ var Handlers = map[string]Handler{
 	"DEL":         del,
 	"COPY":        copy,
 	"LPUSH":       lpush,
+	"LPUSHX":      lpush,
 	"LPOP":        lpop,
 	"PERSIST":     persist,
 	"EXPIRE":      setExpiry,

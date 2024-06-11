@@ -22,6 +22,10 @@ func lpush(h handlerArgs) resp.RespValue {
 		el.expiry = 0
 	}
 
+	if h.command == "LPUSHX" && !ok {
+		return resp.RespValue{Type: "error", Str: "ERR key does not exist"}
+	}
+
 	if ok && el.typ != "" && el.typ != LIST {
 		return resp.RespValue{Type: "error", Str: "ERR value stored at key is not a list"}
 	}
