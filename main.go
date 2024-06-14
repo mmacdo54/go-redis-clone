@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net"
 
 	"github.com/mmacdo54/go-redis-clone/internal/handlers"
@@ -52,10 +53,13 @@ func handleConnection(conn net.Conn, store *storage.Store) {
 		val, err := reader.ReadResp()
 
 		if err != nil {
+			if err == io.EOF {
+				fmt.Println("Client disconnected")
+				break
+			}
 			if err := writer.WriteErrorResp(err); err != nil {
 				fmt.Println(err)
 			}
-			continue
 		}
 
 		response, err := handlers.HandleRespValue(val, &conn)
