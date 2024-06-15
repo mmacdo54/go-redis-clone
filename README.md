@@ -24,6 +24,6 @@ Currently supported Redis Commands
 - PEXPIRE
 - PEXPIREAT
 - EXPIRETIME
-- SUBSCRIBE (single channel only)
+- SUBSCRIBE
 - PUBLISH
-- UNSUBSCRIBE (channel must be specified)
+- UNSUBSCRIBE

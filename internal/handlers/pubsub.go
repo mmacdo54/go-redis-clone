@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net"
+	"slices"
 	"sync"
 
 	"github.com/mmacdo54/go-redis-clone/internal/resp"
@@ -10,19 +11,51 @@ import (
 var connections = map[string][]*net.Conn{}
 var connectionMutex = sync.RWMutex{}
 
-func subscribe(h handlerArgs) resp.RespValue {
-	// TODO HANDLE MULTIPLE CHANNEL ARGUMENTS
-	// TODO DEDUPE EXISTING CONNECTIONS
-	if len(h.args) != 1 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of arguments for 'subscribe' command"}
+func getAllChannels() (keys []string) {
+	connectionMutex.RLock()
+	for k := range connections {
+		keys = append(keys, k)
+	}
+	connectionMutex.RUnlock()
+	return
+}
+
+func isInChannel(conn *net.Conn, channel string) bool {
+	connectionMutex.RLock()
+	conns, ok := connections[channel]
+	connectionMutex.RUnlock()
+
+	if !ok {
+		return false
 	}
 
-	channel := h.args[0].Bulk
+	return slices.ContainsFunc(conns, func(c *net.Conn) bool {
+		return c == conn
+	})
+}
 
-	connectionMutex.Lock()
-	connections[channel] = append(connections[channel], h.conn)
-	connectionMutex.Unlock()
+func sendMessageToConnection(conn *net.Conn, message resp.RespValue) {
+	w := resp.NewRespWriter(*conn)
+	w.WriteResp(message)
+}
 
+func sendMessageToChannel(channel string, message resp.RespValue) resp.RespValue {
+	connectionMutex.RLock()
+	connections := connections[channel]
+	connectionMutex.RUnlock()
+
+	var wg sync.WaitGroup
+	wg.Add(len(connections))
+	for _, c := range connections {
+		go sendMessageToConnection(c, message)
+		wg.Done()
+	}
+	wg.Wait()
+
+	return resp.RespValue{Type: "integer", Num: len(connections)}
+}
+
+func createSubMessage(channel string) resp.RespValue {
 	return resp.RespValue{
 		Type: "array",
 		Array: []resp.RespValue{
@@ -33,31 +66,88 @@ func subscribe(h handlerArgs) resp.RespValue {
 	}
 }
 
-func unsubscribe(h handlerArgs) resp.RespValue {
-	// TODO HANDLE NO ARGUMENTS SHOULD UNSUBSCRIBE FROM ALL CHANNELS
-	if len(h.args) != 1 {
-		return resp.RespValue{Type: "error", Str: "ERR 'unsubscribe' requires 1 argument"}
+func sendSubMessages(channels []string) {
+	for _, c := range channels {
+		message := createSubMessage(c)
+		sendMessageToChannel(c, message)
 	}
+}
 
-	channel := h.args[0].Bulk
-	connectionMutex.Lock()
-	updatedConnections := []*net.Conn{}
-	for _, conn := range connections[channel] {
-		if h.conn != conn {
-			updatedConnections = append(updatedConnections, conn)
-		}
-	}
-	connections[channel] = updatedConnections
-	connectionMutex.Unlock()
-
+func createUnsubMessage(channel string) resp.RespValue {
 	return resp.RespValue{
 		Type: "array",
 		Array: []resp.RespValue{
 			{Type: "bulk", Bulk: "unsubscribe"},
-			{Type: "bulk", Bulk: "channel"},
+			{Type: "bulk", Bulk: channel},
 			{Type: "integer", Num: 1},
 		},
 	}
+}
+
+func sendUnsubMessages(channels []string) {
+	for _, c := range channels {
+		message := createUnsubMessage(c)
+		sendMessageToChannel(c, message)
+	}
+}
+
+func removeFromChannels(conn *net.Conn, channels []string) {
+	unsubbedChannels := []string{}
+	for _, c := range channels {
+		if !isInChannel(conn, c) {
+			return
+		}
+		connectionMutex.Lock()
+		updatedConnections := []*net.Conn{}
+		for _, c := range connections[c] {
+			if conn != c {
+				updatedConnections = append(updatedConnections, c)
+			}
+		}
+		connections[c] = updatedConnections
+		connectionMutex.Unlock()
+		unsubbedChannels = append(unsubbedChannels, c)
+	}
+}
+
+func subscribe(h handlerArgs) resp.RespValue {
+	if len(h.args) == 0 {
+		return resp.RespValue{Type: "error", Str: "ERR 'subscribe' command needs at least one channel"}
+	}
+
+	channels := []string{}
+
+	for _, c := range h.args {
+		channels = append(channels, c.Bulk)
+	}
+
+	connectionMutex.Lock()
+	for _, c := range channels {
+		if v, ok := connections[c]; ok && slices.Contains(v, h.conn) {
+			continue
+		}
+		connections[c] = append(connections[c], h.conn)
+	}
+	connectionMutex.Unlock()
+
+	sendSubMessages(channels)
+
+	return resp.RespValue{Type: "void"}
+}
+
+func unsubscribe(h handlerArgs) resp.RespValue {
+	unsubChannels := []string{}
+	if len(h.args) == 0 {
+		unsubChannels = append(unsubChannels, getAllChannels()...)
+	} else {
+		for _, c := range h.args {
+			unsubChannels = append(unsubChannels, c.Bulk)
+		}
+	}
+
+	removeFromChannels(h.conn, unsubChannels)
+
+	return resp.RespValue{Type: "string", Str: "OK"}
 }
 
 func publish(h handlerArgs) resp.RespValue {
@@ -67,10 +157,6 @@ func publish(h handlerArgs) resp.RespValue {
 
 	channel := h.args[0].Bulk
 	message := h.args[1].Bulk
-	connectionMutex.RLock()
-	cs := connections[channel]
-	connectionMutex.RUnlock()
-
 	subMessage := resp.RespValue{
 		Type: "array",
 		Array: []resp.RespValue{
@@ -79,15 +165,6 @@ func publish(h handlerArgs) resp.RespValue {
 			{Type: "bulk", Bulk: message},
 		},
 	}
-	var wg sync.WaitGroup
-	wg.Add(len(cs))
-	for _, c := range cs {
-		go func(c *net.Conn, wg *sync.WaitGroup) {
-			w := resp.NewRespWriter(*c)
-			w.WriteResp(subMessage)
-			wg.Done()
-		}(c, &wg)
-	}
-	wg.Wait()
-	return resp.RespValue{Type: "integer", Num: len(cs)}
+
+	return sendMessageToChannel(channel, subMessage)
 }

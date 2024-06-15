@@ -72,6 +72,9 @@ func handleConnection(conn net.Conn, store *storage.Store) {
 		}
 
 		store.Write(val)
-		writer.WriteResp(response)
+
+		if response.Type != "void" {
+			writer.WriteResp(response)
+		}
 	}
 }
