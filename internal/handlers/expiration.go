@@ -85,17 +85,20 @@ func persist(h handlerArgs) resp.RespValue {
 	}
 
 	key := h.args[0].Bulk
-	setsMU.RLock()
-	s, ok := sets[key]
-	if !ok || s.expiry == 0 {
+	v, ok, err := h.store.GetByKey(storage.KV{Key: key})
+
+	if err != nil {
+		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+	}
+
+	if !ok || v.Exp == 0 {
 		return resp.RespValue{Type: "integer", Num: 0}
 	}
-	setsMU.RUnlock()
 
-	setsMU.Lock()
-	s.expiry = 0
-	sets[key] = s
-	setsMU.Unlock()
+	v.Exp = 0
+	if err = h.store.SetKV(v); err != nil {
+		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+	}
 
 	return resp.RespValue{Type: "integer", Num: 1}
 }
@@ -106,16 +109,18 @@ func expiretime(h handlerArgs) resp.RespValue {
 	}
 
 	key := h.args[0].Bulk
-	setsMU.RLock()
-	v, ok := sets[key]
-	setsMU.RUnlock()
+	v, ok, err := h.store.GetByKey(storage.KV{Key: key})
+
+	if err != nil {
+		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+	}
 
 	if !ok {
 		return resp.RespValue{Type: "integer", Num: -2}
 	}
-	if v.expiry == 0 {
+	if v.Exp == 0 {
 		return resp.RespValue{Type: "integer", Num: -1}
 	}
 
-	return resp.RespValue{Type: "integer", Num: v.expiry / 1000}
+	return resp.RespValue{Type: "integer", Num: v.Exp / 1000}
 }

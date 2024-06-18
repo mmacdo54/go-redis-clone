@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"sync"
 
 	"github.com/mmacdo54/go-redis-clone/internal/resp"
 	"github.com/mmacdo54/go-redis-clone/internal/storage"
@@ -15,16 +14,6 @@ const (
 	STRING = "string"
 	LIST   = "list"
 )
-
-type setValue struct {
-	typ    string
-	str    string
-	list   []string
-	expiry int
-}
-
-var sets = map[string]setValue{}
-var setsMU = sync.RWMutex{}
 
 type handlerArgs struct {
 	args    []resp.RespValue
@@ -43,6 +32,9 @@ var Handlers = map[string]Handler{
 	"LPUSH":       lpush,
 	"LPUSHX":      lpush,
 	"LPOP":        lpop,
+	"RPUSH":       rpush,
+	"RPUSHX":      rpush,
+	"RPOP":        rpop,
 	"PERSIST":     persist,
 	"EXPIRE":      setExpiry,
 	"EXPIREAT":    setExpiry,
