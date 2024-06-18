@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/mmacdo54/go-redis-clone/internal/resp"
+	"github.com/mmacdo54/go-redis-clone/internal/storage"
 )
 
 func set(h handlerArgs) resp.RespValue {
@@ -23,9 +24,11 @@ func set(h handlerArgs) resp.RespValue {
 		opts = o
 	}
 
-	setsMU.RLock()
-	v, exists := sets[key]
-	setsMU.RUnlock()
+	v, exists, err := h.store.GetByKey(storage.KV{Key: key})
+
+	if err != nil {
+		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+	}
 
 	if opts.nx && exists {
 		return resp.RespValue{Type: "null"}
@@ -35,35 +38,35 @@ func set(h handlerArgs) resp.RespValue {
 		return resp.RespValue{Type: "null"}
 	}
 
-	s := setValue{typ: STRING, str: value}
+	kv := storage.KV{Typ: STRING, Key: key, Str: value}
 
 	if opts.keepttl && exists {
-		s.expiry = v.expiry
+		kv.Exp = v.Exp
 	} else {
 		switch {
 		case opts.ex > 0:
-			s.expiry = opts.ex
+			kv.Exp = opts.ex
 		case opts.px > 0:
-			s.expiry = opts.px
+			kv.Exp = opts.px
 		case opts.exat > 0:
-			s.expiry = opts.exat
+			kv.Exp = opts.exat
 		case opts.pxat > 0:
-			s.expiry = opts.pxat
+			kv.Exp = opts.pxat
 		}
 	}
 
-	setsMU.Lock()
-	sets[key] = s
-	setsMU.Unlock()
+	if err := h.store.SetKV(kv); err != nil {
+		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+	}
 
 	if opts.get && !exists {
 		return resp.RespValue{Type: "null"}
 	}
 	if opts.get {
-		if v.typ != STRING {
+		if v.Typ != STRING {
 			return resp.RespValue{Type: "error", Str: "ERR value stored at key is not a string"}
 		}
-		return resp.RespValue{Type: "bulk", Bulk: v.str}
+		return resp.RespValue{Type: "bulk", Bulk: v.Str}
 	}
 
 	return resp.RespValue{Type: "string", Str: "OK"}
@@ -75,29 +78,32 @@ func get(h handlerArgs) resp.RespValue {
 	}
 
 	key := h.args[0].Bulk
+	kv := storage.KV{Key: key}
 
-	setsMU.RLock()
-	value, ok := sets[key]
-	setsMU.RUnlock()
+	v, exists, err := h.store.GetByKey(kv)
 
-	if !ok {
+	if err != nil {
+		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+	}
+
+	if !exists {
 		return resp.RespValue{Type: "null"}
 	}
 
 	now := int(time.Now().Unix()) * 1000
 
-	if value.expiry > 0 && value.expiry < now {
-		setsMU.Lock()
-		delete(sets, key)
-		setsMU.Unlock()
+	if v.Exp > 0 && v.Exp < now {
+		if _, err := h.store.DeleteByKey(kv); err != nil {
+			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+		}
 		return resp.RespValue{Type: "null"}
 	}
 
-	if value.typ != STRING {
+	if v.Typ != STRING {
 		return resp.RespValue{Type: "error", Str: "ERR value stored at key is not a string"}
 	}
 
-	return resp.RespValue{Type: "bulk", Bulk: value.str}
+	return resp.RespValue{Type: "bulk", Bulk: v.Str}
 }
 
 func del(h handlerArgs) resp.RespValue {
@@ -107,12 +113,15 @@ func del(h handlerArgs) resp.RespValue {
 
 	count := 0
 	for _, k := range h.args {
-		setsMU.Lock()
-		if _, ok := sets[k.Bulk]; ok {
-			count++
-			delete(sets, k.Bulk)
+		dc, err := h.store.DeleteByKey(storage.KV{Key: k.Bulk})
+
+		if err != nil {
+			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
 		}
-		setsMU.Unlock()
+
+		if dc == 1 {
+			count++
+		}
 	}
 
 	return resp.RespValue{Type: "integer", Num: count}
@@ -126,21 +135,26 @@ func copy(h handlerArgs) resp.RespValue {
 	key := h.args[0].Bulk
 	newKey := h.args[1].Bulk
 	o := parseCopyOptions(h.args)
-	fmt.Println(o.replace)
-	setsMU.RLock()
-	current, oldExists := sets[key]
-	_, newExists := sets[newKey]
-	setsMU.RUnlock()
+
+	current, oldExists, err := h.store.GetByKey(storage.KV{Key: key})
+	if err != nil {
+		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+	}
+
+	_, newExists, err := h.store.GetByKey(storage.KV{Key: newKey})
+	if err != nil {
+		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+	}
+
 	if !oldExists || newExists {
 		return resp.RespValue{Type: "integer", Num: 0}
 	}
 
-	setsMU.Lock()
-	sets[newKey] = current
+	current.Key = newKey
+	h.store.SetKV(current)
 	if o.replace {
-		delete(sets, key)
+		h.store.DeleteByKey(storage.KV{Key: key})
 	}
-	setsMU.Unlock()
 
 	return resp.RespValue{Type: "integer", Num: 1}
 }
