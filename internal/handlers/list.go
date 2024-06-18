@@ -174,3 +174,27 @@ func rpop(h handlerArgs) resp.RespValue {
 
 	return resp.RespValue{Type: "bulk", Bulk: val}
 }
+
+func llen(h handlerArgs) resp.RespValue {
+	if len(h.args) == 0 {
+		return generateErrorResponse(fmt.Errorf("no key passed to 'llen' command"))
+	}
+
+	key := h.args[0].Bulk
+
+	l, ok, err := h.store.GetByKey(storage.KV{Key: key})
+
+	if err != nil {
+		return generateErrorResponse(err)
+	}
+
+	if !ok {
+		return resp.RespValue{Type: "integer", Num: 0}
+	}
+
+	if l.Typ != LIST {
+		return generateErrorResponse(fmt.Errorf("value at key is not a list"))
+	}
+
+	return resp.RespValue{Type: "integer", Num: len(l.Arr)}
+}
