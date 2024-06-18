@@ -35,6 +35,7 @@ var Handlers = map[string]Handler{
 	"RPUSHX":      rpush,
 	"RPOP":        rpop,
 	"LLEN":        llen,
+	"LINDEX":      lindex,
 	"PERSIST":     persist,
 	"EXPIRE":      setExpiry,
 	"EXPIREAT":    setExpiry,

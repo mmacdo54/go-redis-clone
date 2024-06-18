@@ -23,6 +23,7 @@ Currently supported Redis Commands
 - RPUSHX
 - RPOP (Only first item for now)
 - LLEN
+- LINDEX
 - PERSIST
 - EXPIRE
 - EXPIREAT

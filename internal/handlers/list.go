@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/mmacdo54/go-redis-clone/internal/resp"
@@ -197,4 +198,41 @@ func llen(h handlerArgs) resp.RespValue {
 	}
 
 	return resp.RespValue{Type: "integer", Num: len(l.Arr)}
+}
+
+func lindex(h handlerArgs) resp.RespValue {
+	if len(h.args) != 2 {
+		return generateErrorResponse(fmt.Errorf("wrong amount of arguments to 'lindex' command"))
+	}
+
+	key := h.args[0].Bulk
+	index, err := strconv.Atoi(h.args[1].Bulk)
+
+	if err != nil {
+		return generateErrorResponse(err)
+	}
+
+	l, ok, err := h.store.GetByKey(storage.KV{Key: key})
+
+	if err != nil {
+		return generateErrorResponse(err)
+	}
+
+	if !ok {
+		return resp.RespValue{Type: "null"}
+	}
+
+	if l.Typ != LIST {
+		return generateErrorResponse(fmt.Errorf("value at key is not a list"))
+	}
+
+	if index < 0 {
+		index = len(l.Arr) + index
+	}
+
+	if index < 0 || index >= len(l.Arr) {
+		return generateErrorResponse(fmt.Errorf("index out of range"))
+	}
+
+	return resp.RespValue{Type: "bulk", Bulk: l.Arr[index]}
 }
