@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"fmt"
+
 	"github.com/mmacdo54/go-redis-clone/internal/resp"
+	"github.com/mmacdo54/go-redis-clone/internal/storage"
 )
 
 func exists(h handlerArgs) resp.RespValue {
@@ -11,11 +14,14 @@ func exists(h handlerArgs) resp.RespValue {
 
 	count := 0
 	for _, k := range h.args {
-		setsMU.RLock()
-		if _, ok := sets[k.Bulk]; ok {
+		exists, err := h.store.Exists(storage.KV{Key: k.Bulk})
+		if err != nil {
+			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		}
+
+		if exists {
 			count++
 		}
-		setsMU.RUnlock()
 	}
 
 	return resp.RespValue{Type: "integer", Num: count}

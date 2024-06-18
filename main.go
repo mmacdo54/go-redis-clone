@@ -11,28 +11,19 @@ import (
 )
 
 func main() {
-	l, err := net.Listen("tcp", ":6379")
-
+	store, err := storage.InitStore()
 	if err != nil {
 		fmt.Println(err)
-		return
-	}
-
-	fmt.Println("Listening for tcp connections on port 6379")
-
-	store, err := storage.NewStore("database.aof")
-
-	if err != nil {
-		fmt.Println(err)
-		return
+		panic(err)
 	}
 	defer store.Close()
-	store.Read(func(v resp.RespValue) {
-		if _, err := handlers.HandleRespValue(v, nil); err != nil {
-			fmt.Println(err)
-			return
-		}
-	})
+
+	l, err := net.Listen("tcp", ":6379")
+	if err != nil {
+		fmt.Println(err)
+		panic(err)
+	}
+	fmt.Println("Listening for tcp connections on port 6379")
 
 	for {
 		conn, err := l.Accept()
@@ -45,7 +36,7 @@ func main() {
 	}
 }
 
-func handleConnection(conn net.Conn, store *storage.Store) {
+func handleConnection(conn net.Conn, store storage.Store) {
 	defer conn.Close()
 	for {
 		reader := resp.NewRespReader(conn)
@@ -62,7 +53,7 @@ func handleConnection(conn net.Conn, store *storage.Store) {
 			}
 		}
 
-		response, err := handlers.HandleRespValue(val, &conn)
+		response, err := handlers.HandleRespValue(val, &conn, store)
 
 		if err != nil {
 			if err := writer.WriteErrorResp(err); err != nil {
@@ -70,8 +61,6 @@ func handleConnection(conn net.Conn, store *storage.Store) {
 			}
 			continue
 		}
-
-		store.Write(val)
 
 		if response.Type != "void" {
 			writer.WriteResp(response)

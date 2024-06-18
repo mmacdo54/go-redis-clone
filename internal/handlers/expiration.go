@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/mmacdo54/go-redis-clone/internal/resp"
+	"github.com/mmacdo54/go-redis-clone/internal/storage"
 )
 
 func setExpiry(h handlerArgs) resp.RespValue {
@@ -34,32 +35,34 @@ func setExpiry(h handlerArgs) resp.RespValue {
 		opts = o
 	}
 
-	setsMU.RLock()
-	v, exists := sets[key]
-	setsMU.RUnlock()
+	v, exists, err := h.store.GetByKey(storage.KV{Key: key})
+
+	if err != nil {
+		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+	}
 
 	if !exists {
 		return resp.RespValue{Type: "integer", Num: 0}
 	}
 
-	if opts.nx && v.expiry != 0 {
+	if opts.nx && v.Exp != 0 {
 		return resp.RespValue{Type: "integer", Num: 0}
 	}
 
-	if opts.xx && v.expiry == 0 {
+	if opts.xx && v.Exp == 0 {
 		return resp.RespValue{Type: "integer", Num: 0}
 	}
 
 	now := int(time.Now().Unix())
 	switch h.command {
 	case "EXPIRE":
-		v.expiry = (now + expiry) * 1000
+		v.Exp = (now + expiry) * 1000
 	case "EXPIREAT":
-		v.expiry = expiry * 1000
+		v.Exp = expiry * 1000
 	case "PEXPIRE":
-		v.expiry = now*1000 + expiry
+		v.Exp = now*1000 + expiry
 	case "PEXPIREAT":
-		v.expiry = expiry
+		v.Exp = expiry
 	default:
 		return resp.RespValue{
 			Type: "error",
@@ -67,9 +70,11 @@ func setExpiry(h handlerArgs) resp.RespValue {
 		}
 	}
 
-	setsMU.Lock()
-	sets[key] = v
-	setsMU.Unlock()
+	err = h.store.SetKV(v)
+
+	if err != nil {
+		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+	}
 
 	return resp.RespValue{Type: "integer", Num: 1}
 }

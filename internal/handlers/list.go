@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/mmacdo54/go-redis-clone/internal/resp"
+	"github.com/mmacdo54/go-redis-clone/internal/storage"
 )
 
 func lpush(h handlerArgs) resp.RespValue {
@@ -12,37 +14,42 @@ func lpush(h handlerArgs) resp.RespValue {
 	}
 
 	key := h.args[0].Bulk
-	setsMU.RLock()
-	el, ok := sets[key]
-	setsMU.RUnlock()
+	el, ok, err := h.store.GetByKey(storage.KV{Key: key})
 
-	now := int(time.Now().Unix()) * 1000
-	if el.expiry > 0 && el.expiry < now {
-		el.list = []string{}
-		el.expiry = 0
+	if err != nil {
+		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
 	}
 
 	if h.command == "LPUSHX" && !ok {
 		return resp.RespValue{Type: "error", Str: "ERR key does not exist"}
 	}
 
-	if ok && el.typ != "" && el.typ != LIST {
+	if ok && el.Typ != "" && el.Typ != LIST {
 		return resp.RespValue{Type: "error", Str: "ERR value stored at key is not a list"}
 	}
 
-	el.typ = LIST
+	el.Key = key
+	el.Typ = LIST
+	now := int(time.Now().Unix()) * 1000
+	if el.Exp > 0 && el.Exp < now {
+		el.Arr = []string{}
+		el.Exp = 0
+	}
+
 	list := []string{}
 	for i := len(h.args) - 1; i >= 1; i-- {
 		list = append(list, h.args[i].Bulk)
 	}
 
-	setsMU.Lock()
 	if ok {
-		list = append(list, el.list...)
+		list = append(list, el.Arr...)
 	}
-	el.list = list
-	sets[key] = el
-	setsMU.Unlock()
+	el.Arr = list
+	err = h.store.SetKV(el)
+
+	if err != nil {
+		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+	}
 
 	return resp.RespValue{Type: "integer", Num: len(list)}
 }
@@ -54,32 +61,35 @@ func lpop(h handlerArgs) resp.RespValue {
 	}
 
 	key := h.args[0].Bulk
+	el, ok, err := h.store.GetByKey(storage.KV{Key: key})
 
-	setsMU.RLock()
-	v, ok := sets[key]
-	setsMU.RUnlock()
+	if err != nil {
+		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+	}
 
-	if !ok || v.typ != LIST || len(v.list) == 0 {
+	if !ok || el.Typ != LIST || len(el.Arr) == 0 {
 		return resp.RespValue{Type: "null"}
 	}
 
 	now := int(time.Now().Unix()) * 1000
-	if v.expiry > 0 && v.expiry < now {
-		setsMU.Lock()
-		delete(sets, key)
-		setsMU.Unlock()
+	if el.Exp > 0 && el.Exp < now {
+		if _, err := h.store.DeleteByKey(el); err != nil {
+			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		}
 		return resp.RespValue{Type: "null"}
 	}
 
-	val := v.list[0]
-	setsMU.Lock()
-	if len(v.list) == 1 {
-		delete(sets, key)
+	val := el.Arr[0]
+	if len(el.Arr) == 1 {
+		if _, err := h.store.DeleteByKey(el); err != nil {
+			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		}
 	} else {
-		v.list = v.list[1:]
-		sets[key] = v
+		el.Arr = el.Arr[1:]
+		if err := h.store.SetKV(el); err != nil {
+			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		}
 	}
-	setsMU.Unlock()
 
 	return resp.RespValue{Type: "bulk", Bulk: val}
 }

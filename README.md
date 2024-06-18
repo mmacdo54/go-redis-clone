@@ -5,8 +5,9 @@ A simple to run basic implementation of a Redis server - this is just for a bit 
 
 ## Running
 1. Make sure you have Go installed
+2. Make sure you have docker installed
 2. Pull the github repo
-3. Run `go run .` - this will start the redis server on localhost:6379
+3. Run `docker compose up -d && go run .` - this will start the database on localhost:27017 and redis server on localhost:6379
 
 ## Supported Commands
 Currently supported Redis Commands

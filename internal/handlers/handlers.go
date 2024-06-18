@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/mmacdo54/go-redis-clone/internal/resp"
+	"github.com/mmacdo54/go-redis-clone/internal/storage"
 )
 
 const (
@@ -29,6 +30,7 @@ type handlerArgs struct {
 	args    []resp.RespValue
 	conn    *net.Conn
 	command string
+	store   storage.Store
 }
 type Handler func(handlerArgs) resp.RespValue
 
@@ -52,7 +54,7 @@ var Handlers = map[string]Handler{
 	"UNSUBSCRIBE": unsubscribe,
 }
 
-func HandleRespValue(v resp.RespValue, conn *net.Conn) (resp.RespValue, error) {
+func HandleRespValue(v resp.RespValue, conn *net.Conn, store storage.Store) (resp.RespValue, error) {
 	if v.Type != "array" {
 		return resp.RespValue{}, errors.New("Only accept array type")
 	}
@@ -65,5 +67,5 @@ func HandleRespValue(v resp.RespValue, conn *net.Conn) (resp.RespValue, error) {
 		return resp.RespValue{}, fmt.Errorf("Invalid command: %s", command)
 	}
 
-	return handler(handlerArgs{args: args, conn: conn, command: command}), nil
+	return handler(handlerArgs{args: args, conn: conn, command: command, store: store}), nil
 }
