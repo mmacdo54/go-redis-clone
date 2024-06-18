@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net"
 	"slices"
 	"sync"
@@ -112,7 +113,7 @@ func removeFromChannels(conn *net.Conn, channels []string) {
 
 func subscribe(h handlerArgs) resp.RespValue {
 	if len(h.args) == 0 {
-		return resp.RespValue{Type: "error", Str: "ERR 'subscribe' command needs at least one channel"}
+		return generateErrorResponse(fmt.Errorf("'subscribe' command needs at least one channel"))
 	}
 
 	channels := []string{}
@@ -152,7 +153,7 @@ func unsubscribe(h handlerArgs) resp.RespValue {
 
 func publish(h handlerArgs) resp.RespValue {
 	if len(h.args) != 2 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of arguments for 'publish' command"}
+		return generateErrorResponse(fmt.Errorf("wrong number of arguments for 'publish' command"))
 	}
 
 	channel := h.args[0].Bulk

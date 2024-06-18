@@ -53,14 +53,7 @@ func handleConnection(conn net.Conn, store storage.Store) {
 			}
 		}
 
-		response, err := handlers.HandleRespValue(val, &conn, store)
-
-		if err != nil {
-			if err := writer.WriteErrorResp(err); err != nil {
-				fmt.Println(err)
-			}
-			continue
-		}
+		response := handlers.HandleRespValue(val, &conn, store)
 
 		if response.Type != "void" {
 			writer.WriteResp(response)

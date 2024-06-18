@@ -12,10 +12,7 @@ import (
 
 func setExpiry(h handlerArgs) resp.RespValue {
 	if len(h.args) < 2 {
-		return resp.RespValue{
-			Type: "error",
-			Str:  fmt.Sprintf("ERR wrong number of arguments for '%s' command", strings.ToLower(h.command)),
-		}
+		return generateErrorResponse(fmt.Errorf("wrong number of arguments for '%s' command", strings.ToLower(h.command)))
 	}
 
 	key := h.args[0].Bulk
@@ -23,14 +20,14 @@ func setExpiry(h handlerArgs) resp.RespValue {
 	expiry, err := strconv.Atoi(value)
 
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", invalidOptionsError{}.Error())}
+		return generateErrorResponse(invalidOptionsError{})
 	}
 
 	var opts options
 	if len(h.args) > 2 {
 		o, err := parseSetOptions(h.args[2:])
 		if err != nil {
-			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+			return generateErrorResponse(err)
 		}
 		opts = o
 	}
@@ -38,7 +35,7 @@ func setExpiry(h handlerArgs) resp.RespValue {
 	v, exists, err := h.store.GetByKey(storage.KV{Key: key})
 
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		return generateErrorResponse(err)
 	}
 
 	if !exists {
@@ -64,16 +61,13 @@ func setExpiry(h handlerArgs) resp.RespValue {
 	case "PEXPIREAT":
 		v.Exp = expiry
 	default:
-		return resp.RespValue{
-			Type: "error",
-			Str:  fmt.Sprintf("ERR command '%s' not handled", h.command),
-		}
+		return generateErrorResponse(fmt.Errorf("command '%s' not handled", h.command))
 	}
 
 	err = h.store.SetKV(v)
 
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		return generateErrorResponse(err)
 	}
 
 	return resp.RespValue{Type: "integer", Num: 1}
@@ -81,14 +75,14 @@ func setExpiry(h handlerArgs) resp.RespValue {
 
 func persist(h handlerArgs) resp.RespValue {
 	if len(h.args) != 1 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of args passed to 'persist' command"}
+		return generateErrorResponse(fmt.Errorf("wrong number of args passed to 'persist' command"))
 	}
 
 	key := h.args[0].Bulk
 	v, ok, err := h.store.GetByKey(storage.KV{Key: key})
 
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		return generateErrorResponse(err)
 	}
 
 	if !ok || v.Exp == 0 {
@@ -97,7 +91,7 @@ func persist(h handlerArgs) resp.RespValue {
 
 	v.Exp = 0
 	if err = h.store.SetKV(v); err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		return generateErrorResponse(err)
 	}
 
 	return resp.RespValue{Type: "integer", Num: 1}
@@ -105,14 +99,14 @@ func persist(h handlerArgs) resp.RespValue {
 
 func expiretime(h handlerArgs) resp.RespValue {
 	if len(h.args) != 1 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of arguments for 'expiretime' command"}
+		return generateErrorResponse(fmt.Errorf("wrong number of arguments for 'expiretime' command"))
 	}
 
 	key := h.args[0].Bulk
 	v, ok, err := h.store.GetByKey(storage.KV{Key: key})
 
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		return generateErrorResponse(err)
 	}
 
 	if !ok {

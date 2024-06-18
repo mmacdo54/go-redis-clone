@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -46,9 +45,13 @@ var Handlers = map[string]Handler{
 	"UNSUBSCRIBE": unsubscribe,
 }
 
-func HandleRespValue(v resp.RespValue, conn *net.Conn, store storage.Store) (resp.RespValue, error) {
+func generateErrorResponse(err error) resp.RespValue {
+	return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+}
+
+func HandleRespValue(v resp.RespValue, conn *net.Conn, store storage.Store) resp.RespValue {
 	if v.Type != "array" {
-		return resp.RespValue{}, errors.New("Only accept array type")
+		return generateErrorResponse(fmt.Errorf("Only accept array type"))
 	}
 
 	command := strings.ToUpper(v.Array[0].Bulk)
@@ -56,8 +59,8 @@ func HandleRespValue(v resp.RespValue, conn *net.Conn, store storage.Store) (res
 	handler, ok := Handlers[command]
 
 	if !ok {
-		return resp.RespValue{}, fmt.Errorf("Invalid command: %s", command)
+		return generateErrorResponse(fmt.Errorf("Invalid command: %s", command))
 	}
 
-	return handler(handlerArgs{args: args, conn: conn, command: command, store: store}), nil
+	return handler(handlerArgs{args: args, conn: conn, command: command, store: store})
 }

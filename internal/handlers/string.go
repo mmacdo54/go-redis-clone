@@ -10,7 +10,7 @@ import (
 
 func set(h handlerArgs) resp.RespValue {
 	if len(h.args) < 2 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of arguments for 'set' command"}
+		return generateErrorResponse(fmt.Errorf("wrong number of arguments for 'set' command"))
 	}
 
 	key := h.args[0].Bulk
@@ -19,7 +19,7 @@ func set(h handlerArgs) resp.RespValue {
 	if len(h.args) > 2 {
 		o, err := parseSetOptions(h.args[2:])
 		if err != nil {
-			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+			return generateErrorResponse(err)
 		}
 		opts = o
 	}
@@ -27,7 +27,7 @@ func set(h handlerArgs) resp.RespValue {
 	v, exists, err := h.store.GetByKey(storage.KV{Key: key})
 
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+		return generateErrorResponse(err)
 	}
 
 	if opts.nx && exists {
@@ -56,7 +56,7 @@ func set(h handlerArgs) resp.RespValue {
 	}
 
 	if err := h.store.SetKV(kv); err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+		return generateErrorResponse(err)
 	}
 
 	if opts.get && !exists {
@@ -64,7 +64,7 @@ func set(h handlerArgs) resp.RespValue {
 	}
 	if opts.get {
 		if v.Typ != STRING {
-			return resp.RespValue{Type: "error", Str: "ERR value stored at key is not a string"}
+			return generateErrorResponse(fmt.Errorf("value stored at key is not a string"))
 		}
 		return resp.RespValue{Type: "bulk", Bulk: v.Str}
 	}
@@ -74,7 +74,7 @@ func set(h handlerArgs) resp.RespValue {
 
 func get(h handlerArgs) resp.RespValue {
 	if len(h.args) != 1 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of arguments for 'get' command"}
+		return generateErrorResponse(fmt.Errorf("wrong number of arguments for 'get' command"))
 	}
 
 	key := h.args[0].Bulk
@@ -83,7 +83,7 @@ func get(h handlerArgs) resp.RespValue {
 	v, exists, err := h.store.GetByKey(kv)
 
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+		return generateErrorResponse(err)
 	}
 
 	if !exists {
@@ -94,13 +94,13 @@ func get(h handlerArgs) resp.RespValue {
 
 	if v.Exp > 0 && v.Exp < now {
 		if _, err := h.store.DeleteByKey(kv); err != nil {
-			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+			return generateErrorResponse(err)
 		}
 		return resp.RespValue{Type: "null"}
 	}
 
 	if v.Typ != STRING {
-		return resp.RespValue{Type: "error", Str: "ERR value stored at key is not a string"}
+		return generateErrorResponse(fmt.Errorf("value stored at key is not a string"))
 	}
 
 	return resp.RespValue{Type: "bulk", Bulk: v.Str}
@@ -108,7 +108,7 @@ func get(h handlerArgs) resp.RespValue {
 
 func del(h handlerArgs) resp.RespValue {
 	if len(h.args) == 0 {
-		return resp.RespValue{Type: "error", Str: "ERR no keys passed to 'del' command"}
+		return generateErrorResponse(fmt.Errorf("no keys passed to 'del' command"))
 	}
 
 	count := 0
@@ -116,7 +116,7 @@ func del(h handlerArgs) resp.RespValue {
 		dc, err := h.store.DeleteByKey(storage.KV{Key: k.Bulk})
 
 		if err != nil {
-			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+			return generateErrorResponse(err)
 		}
 
 		if dc == 1 {
@@ -129,7 +129,7 @@ func del(h handlerArgs) resp.RespValue {
 
 func copy(h handlerArgs) resp.RespValue {
 	if len(h.args) == 0 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of commands passed to 'copy' command"}
+		return generateErrorResponse(fmt.Errorf("wrong number of commands passed to 'copy' command"))
 	}
 
 	key := h.args[0].Bulk
@@ -138,12 +138,12 @@ func copy(h handlerArgs) resp.RespValue {
 
 	current, oldExists, err := h.store.GetByKey(storage.KV{Key: key})
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+		return generateErrorResponse(err)
 	}
 
 	_, newExists, err := h.store.GetByKey(storage.KV{Key: newKey})
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+		return generateErrorResponse(err)
 	}
 
 	if !oldExists || newExists {
@@ -153,7 +153,9 @@ func copy(h handlerArgs) resp.RespValue {
 	current.Key = newKey
 	h.store.SetKV(current)
 	if o.replace {
-		h.store.DeleteByKey(storage.KV{Key: key})
+		if _, err := h.store.DeleteByKey(storage.KV{Key: key}); err != nil {
+			return generateErrorResponse(err)
+		}
 	}
 
 	return resp.RespValue{Type: "integer", Num: 1}

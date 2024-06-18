@@ -10,22 +10,22 @@ import (
 
 func lpush(h handlerArgs) resp.RespValue {
 	if len(h.args) < 2 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of commands passed to 'lpush' command"}
+		return generateErrorResponse(fmt.Errorf("wrong number of commands passed to '%s' command", h.command))
 	}
 
 	key := h.args[0].Bulk
 	el, ok, err := h.store.GetByKey(storage.KV{Key: key})
 
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		return generateErrorResponse(err)
 	}
 
 	if h.command == "LPUSHX" && !ok {
-		return resp.RespValue{Type: "error", Str: "ERR key does not exist"}
+		return generateErrorResponse(fmt.Errorf("key does not exist"))
 	}
 
 	if ok && el.Typ != "" && el.Typ != LIST {
-		return resp.RespValue{Type: "error", Str: "ERR value stored at key is not a list"}
+		return generateErrorResponse(fmt.Errorf("value stored at key is not a list"))
 	}
 
 	el.Key = key
@@ -48,7 +48,7 @@ func lpush(h handlerArgs) resp.RespValue {
 	err = h.store.SetKV(el)
 
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		return generateErrorResponse(err)
 	}
 
 	return resp.RespValue{Type: "integer", Num: len(list)}
@@ -56,22 +56,22 @@ func lpush(h handlerArgs) resp.RespValue {
 
 func rpush(h handlerArgs) resp.RespValue {
 	if len(h.args) < 2 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of commands passed to 'rpush' command"}
+		return generateErrorResponse(fmt.Errorf("wrong number of commands passed to '%s' command", h.command))
 	}
 
 	key := h.args[0].Bulk
 	el, ok, err := h.store.GetByKey(storage.KV{Key: key})
 
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		return generateErrorResponse(err)
 	}
 
 	if h.command == "RPUSHX" && !ok {
-		return resp.RespValue{Type: "error", Str: "ERR key does not exist"}
+		return generateErrorResponse(fmt.Errorf("key does not exist"))
 	}
 
 	if ok && el.Typ != "" && el.Typ != LIST {
-		return resp.RespValue{Type: "error", Str: "ERR value stored at key is not a list"}
+		return generateErrorResponse(fmt.Errorf("value stored at key is not a list"))
 	}
 
 	el.Key = key
@@ -89,7 +89,7 @@ func rpush(h handlerArgs) resp.RespValue {
 	err = h.store.SetKV(el)
 
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		return generateErrorResponse(err)
 	}
 
 	return resp.RespValue{Type: "integer", Num: len(el.Arr)}
@@ -98,14 +98,14 @@ func rpush(h handlerArgs) resp.RespValue {
 func lpop(h handlerArgs) resp.RespValue {
 	// TODO handle a range
 	if len(h.args) == 2 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of commands passed to 'lpop' command"}
+		return generateErrorResponse(fmt.Errorf("wrong number of commands passed to 'lpop' command"))
 	}
 
 	key := h.args[0].Bulk
 	el, ok, err := h.store.GetByKey(storage.KV{Key: key})
 
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		return generateErrorResponse(err)
 	}
 
 	if !ok || el.Typ != LIST || len(el.Arr) == 0 {
@@ -115,7 +115,7 @@ func lpop(h handlerArgs) resp.RespValue {
 	now := int(time.Now().Unix()) * 1000
 	if el.Exp > 0 && el.Exp < now {
 		if _, err := h.store.DeleteByKey(el); err != nil {
-			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+			return generateErrorResponse(err)
 		}
 		return resp.RespValue{Type: "null"}
 	}
@@ -123,12 +123,12 @@ func lpop(h handlerArgs) resp.RespValue {
 	val := el.Arr[0]
 	if len(el.Arr) == 1 {
 		if _, err := h.store.DeleteByKey(el); err != nil {
-			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+			return generateErrorResponse(err)
 		}
 	} else {
 		el.Arr = el.Arr[1:]
 		if err := h.store.SetKV(el); err != nil {
-			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+			return generateErrorResponse(err)
 		}
 	}
 
@@ -138,14 +138,14 @@ func lpop(h handlerArgs) resp.RespValue {
 func rpop(h handlerArgs) resp.RespValue {
 	// TODO handle a range
 	if len(h.args) == 2 {
-		return resp.RespValue{Type: "error", Str: "ERR wrong number of commands passed to 'rpop' command"}
+		return generateErrorResponse(fmt.Errorf("wrong number of commands passed to 'rpop' command"))
 	}
 
 	key := h.args[0].Bulk
 	el, ok, err := h.store.GetByKey(storage.KV{Key: key})
 
 	if err != nil {
-		return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+		return generateErrorResponse(err)
 	}
 
 	if !ok || el.Typ != LIST || len(el.Arr) == 0 {
@@ -155,7 +155,7 @@ func rpop(h handlerArgs) resp.RespValue {
 	now := int(time.Now().Unix()) * 1000
 	if el.Exp > 0 && el.Exp < now {
 		if _, err := h.store.DeleteByKey(el); err != nil {
-			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+			return generateErrorResponse(err)
 		}
 		return resp.RespValue{Type: "null"}
 	}
@@ -163,12 +163,12 @@ func rpop(h handlerArgs) resp.RespValue {
 	val := el.Arr[len(el.Arr)-1]
 	if len(el.Arr) == 1 {
 		if _, err := h.store.DeleteByKey(el); err != nil {
-			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+			return generateErrorResponse(err)
 		}
 	} else {
 		el.Arr = el.Arr[:len(el.Arr)-1]
 		if err := h.store.SetKV(el); err != nil {
-			return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err)}
+			return generateErrorResponse(err)
 		}
 	}
 
