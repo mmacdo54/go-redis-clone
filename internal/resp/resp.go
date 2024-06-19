@@ -6,4 +6,5 @@ const (
 	INTEGER = ':'
 	BULK    = '$'
 	ARRAY   = '*'
+	SET     = '~'
 )

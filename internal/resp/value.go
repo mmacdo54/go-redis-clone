@@ -28,6 +28,8 @@ func (v RespValue) Marshall() []byte {
 		return v.marshalString()
 	case "null":
 		return v.marshalNull()
+	case "set":
+		return v.marshallSet()
 	default:
 		return []byte{}
 	}
@@ -82,4 +84,17 @@ func (v RespValue) marshalArray() (res []byte) {
 
 func (v RespValue) marshalNull() (res []byte) {
 	return []byte("$-1\r\n")
+}
+
+func (v RespValue) marshallSet() (res []byte) {
+	res = append(res, SET)
+	res = append(res, strconv.Itoa(len(v.Array))...)
+	addRespReturn(&res)
+
+	for _, val := range v.Array {
+		bytes := val.Marshall()
+		res = append(res, bytes...)
+	}
+
+	return
 }

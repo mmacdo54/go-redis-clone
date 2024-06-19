@@ -38,6 +38,7 @@ var Handlers = map[string]Handler{
 	"LLEN":        llen,
 	"LINDEX":      lindex,
 	"SADD":        sadd,
+	"SMEMBERS":    smembers,
 	"PERSIST":     persist,
 	"EXPIRE":      setExpiry,
 	"EXPIREAT":    setExpiry,
