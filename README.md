@@ -25,6 +25,7 @@ Currently supported Redis Commands
 - LLEN
 - LINDEX
 - SADD
+- SMEMBERS
 - PERSIST
 - EXPIRE
 - EXPIREAT
