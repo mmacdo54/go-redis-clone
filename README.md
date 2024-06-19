@@ -24,6 +24,7 @@ Currently supported Redis Commands
 - RPOP (Only first item for now)
 - LLEN
 - LINDEX
+- SADD
 - PERSIST
 - EXPIRE
 - EXPIREAT

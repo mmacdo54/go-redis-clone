@@ -15,6 +15,7 @@ type KV struct {
 	Key string
 	Str string
 	Arr []string
+	Set map[string]struct{}
 	Exp int
 }
 

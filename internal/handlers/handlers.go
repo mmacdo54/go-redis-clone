@@ -12,6 +12,7 @@ import (
 const (
 	STRING = "string"
 	LIST   = "list"
+	SET    = "set"
 )
 
 type handlerArgs struct {
@@ -36,6 +37,7 @@ var Handlers = map[string]Handler{
 	"RPOP":        rpop,
 	"LLEN":        llen,
 	"LINDEX":      lindex,
+	"SADD":        sadd,
 	"PERSIST":     persist,
 	"EXPIRE":      setExpiry,
 	"EXPIREAT":    setExpiry,
