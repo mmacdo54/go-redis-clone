@@ -7,9 +7,11 @@ import (
 	"github.com/mmacdo54/go-redis-clone/internal/storage"
 )
 
-func sadd(h handlerArgs) resp.RespValue {
+func sadd(h handlerArgs) handlerResponse {
 	if len(h.args) < 2 {
-		return generateErrorResponse(fmt.Errorf("wrong amount of arguments passed to 'sadd' command"))
+		return handlerResponse{
+			err: fmt.Errorf("wrong amount of arguments passed to 'sadd' command"),
+		}
 	}
 
 	key := h.args[0].Bulk
@@ -17,11 +19,15 @@ func sadd(h handlerArgs) resp.RespValue {
 	s, ok, err := h.store.GetByKey(storage.KV{Key: key})
 
 	if err != nil {
-		return generateErrorResponse(err)
+		return handlerResponse{
+			err: err,
+		}
 	}
 
 	if ok && s.Typ != SET {
-		return generateErrorResponse(fmt.Errorf("key is not of type set"))
+		return handlerResponse{
+			err: fmt.Errorf("key is not of type set"),
+		}
 	}
 
 	if !ok {
@@ -39,37 +45,50 @@ func sadd(h handlerArgs) resp.RespValue {
 	}
 
 	if err := h.store.SetKV(s); err != nil {
-		return generateErrorResponse(err)
+		return handlerResponse{
+			err: err,
+		}
 	}
 
-	return resp.RespValue{Type: "integer", Num: count}
+	return handlerResponse{
+		resp: generateIntegerResponse(count),
+	}
 }
 
-func smembers(h handlerArgs) resp.RespValue {
+func smembers(h handlerArgs) handlerResponse {
 	if len(h.args) != 1 {
-		return generateErrorResponse(fmt.Errorf("wrong amount of arguments passed to 'smembers' command"))
+		return handlerResponse{
+			err: fmt.Errorf("wrong amount of arguments passed to 'smembers' command"),
+		}
 	}
 
 	key := h.args[0].Bulk
 	s, ok, err := h.store.GetByKey(storage.KV{Key: key})
 
 	if err != nil {
-		return generateErrorResponse(err)
+		return handlerResponse{
+			err: err,
+		}
 	}
 
 	if !ok {
-		return resp.RespValue{Type: "set"}
+		return handlerResponse{
+			resp: generateSetResponse([]resp.RespValue{}),
+		}
 	}
 
 	if s.Typ != SET {
-		return generateErrorResponse(fmt.Errorf("key is not of type set"))
+		return handlerResponse{
+			err: fmt.Errorf("key is not of type set"),
+		}
 	}
 
 	members := []resp.RespValue{}
-
 	for k, _ := range s.Set {
-		members = append(members, resp.RespValue{Type: "bulk", Bulk: k})
+		members = append(members, generateBulkResponse(k))
 	}
 
-	return resp.RespValue{Type: "set", Array: members}
+	return handlerResponse{
+		resp: generateSetResponse(members),
+	}
 }

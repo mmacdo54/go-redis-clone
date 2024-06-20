@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	STRING = "string"
-	LIST   = "list"
-	SET    = "set"
+	STRING  = "string"
+	LIST    = "list"
+	SET     = "set"
+	INTEGER = "integer"
 )
 
 type handlerArgs struct {
@@ -21,7 +22,11 @@ type handlerArgs struct {
 	command string
 	store   storage.Store
 }
-type Handler func(handlerArgs) resp.RespValue
+type handlerResponse struct {
+	err  error
+	resp resp.RespValue
+}
+type Handler func(handlerArgs) handlerResponse
 
 var Handlers = map[string]Handler{
 	"EXISTS":      exists,
@@ -50,8 +55,36 @@ var Handlers = map[string]Handler{
 	"UNSUBSCRIBE": unsubscribe,
 }
 
+func generateVoidResponse() resp.RespValue {
+	return resp.RespValue{Type: resp.TYPE_VOID}
+}
+
+func generateArrayResponse(arr []resp.RespValue) resp.RespValue {
+	return resp.RespValue{Type: resp.TYPE_ARRAY, Array: arr}
+}
+
+func generateSetResponse(set []resp.RespValue) resp.RespValue {
+	return resp.RespValue{Type: resp.TYPE_SET, Array: set}
+}
+
+func generateBulkResponse(bulk string) resp.RespValue {
+	return resp.RespValue{Type: resp.TYPE_BULK, Bulk: bulk}
+}
+
+func generateNullResponse() resp.RespValue {
+	return resp.RespValue{Type: resp.TYPE_NULL}
+}
+
+func generateStringResponse(str string) resp.RespValue {
+	return resp.RespValue{Type: resp.TYPE_STRING, Str: str}
+}
+
+func generateIntegerResponse(num int) resp.RespValue {
+	return resp.RespValue{Type: resp.TYPE_INTEGER, Num: num}
+}
+
 func generateErrorResponse(err error) resp.RespValue {
-	return resp.RespValue{Type: "error", Str: fmt.Sprintf("ERR %s", err.Error())}
+	return resp.RespValue{Type: resp.TYPE_ERROR, Str: fmt.Sprintf("ERR %s", err.Error())}
 }
 
 func HandleRespValue(v resp.RespValue, conn *net.Conn, store storage.Store) resp.RespValue {
@@ -67,5 +100,11 @@ func HandleRespValue(v resp.RespValue, conn *net.Conn, store storage.Store) resp
 		return generateErrorResponse(fmt.Errorf("Invalid command: %s", command))
 	}
 
-	return handler(handlerArgs{args: args, conn: conn, command: command, store: store})
+	r := handler(handlerArgs{args: args, conn: conn, command: command, store: store})
+
+	if r.err != nil {
+		return generateErrorResponse(r.err)
+	}
+
+	return r.resp
 }

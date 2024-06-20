@@ -1,20 +1,25 @@
 package handlers
 
 import (
-	"github.com/mmacdo54/go-redis-clone/internal/resp"
+	"fmt"
+
 	"github.com/mmacdo54/go-redis-clone/internal/storage"
 )
 
-func exists(h handlerArgs) resp.RespValue {
+func exists(h handlerArgs) handlerResponse {
 	if len(h.args) == 0 {
-		return resp.RespValue{Type: "error", Str: "ERR no keys passed to 'exists' command"}
+		return handlerResponse{
+			err: fmt.Errorf("no keys passed to 'exists' command"),
+		}
 	}
 
 	count := 0
 	for _, k := range h.args {
 		exists, err := h.store.Exists(storage.KV{Key: k.Bulk})
 		if err != nil {
-			return generateErrorResponse(err)
+			return handlerResponse{
+				err: err,
+			}
 		}
 
 		if exists {
@@ -22,5 +27,7 @@ func exists(h handlerArgs) resp.RespValue {
 		}
 	}
 
-	return resp.RespValue{Type: "integer", Num: count}
+	return handlerResponse{
+		resp: generateIntegerResponse(count),
+	}
 }

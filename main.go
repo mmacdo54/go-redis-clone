@@ -55,7 +55,7 @@ func handleConnection(conn net.Conn, store storage.Store) {
 
 		response := handlers.HandleRespValue(val, &conn, store)
 
-		if response.Type != "void" {
+		if response.Type != resp.TYPE_VOID {
 			writer.WriteResp(response)
 		}
 	}

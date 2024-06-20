@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mmacdo54/go-redis-clone/internal/resp"
 	"github.com/mmacdo54/go-redis-clone/internal/storage"
 )
 
-func set(h handlerArgs) resp.RespValue {
+func set(h handlerArgs) handlerResponse {
 	if len(h.args) < 2 {
-		return generateErrorResponse(fmt.Errorf("wrong number of arguments for 'set' command"))
+		return handlerResponse{
+			err: fmt.Errorf("wrong number of arguments for 'set' command"),
+		}
 	}
 
 	key := h.args[0].Bulk
@@ -19,7 +20,9 @@ func set(h handlerArgs) resp.RespValue {
 	if len(h.args) > 2 {
 		o, err := parseSetOptions(h.args[2:])
 		if err != nil {
-			return generateErrorResponse(err)
+			return handlerResponse{
+				err: err,
+			}
 		}
 		opts = o
 	}
@@ -27,15 +30,21 @@ func set(h handlerArgs) resp.RespValue {
 	v, exists, err := h.store.GetByKey(storage.KV{Key: key})
 
 	if err != nil {
-		return generateErrorResponse(err)
+		return handlerResponse{
+			err: err,
+		}
 	}
 
 	if opts.nx && exists {
-		return resp.RespValue{Type: "null"}
+		return handlerResponse{
+			resp: generateNullResponse(),
+		}
 	}
 
 	if opts.xx && !exists {
-		return resp.RespValue{Type: "null"}
+		return handlerResponse{
+			resp: generateNullResponse(),
+		}
 	}
 
 	kv := storage.KV{Typ: STRING, Key: key, Str: value}
@@ -56,25 +65,37 @@ func set(h handlerArgs) resp.RespValue {
 	}
 
 	if err := h.store.SetKV(kv); err != nil {
-		return generateErrorResponse(err)
+		return handlerResponse{
+			err: err,
+		}
 	}
 
 	if opts.get && !exists {
-		return resp.RespValue{Type: "null"}
+		return handlerResponse{
+			resp: generateNullResponse(),
+		}
 	}
 	if opts.get {
 		if v.Typ != STRING {
-			return generateErrorResponse(fmt.Errorf("value stored at key is not a string"))
+			return handlerResponse{
+				err: fmt.Errorf("value stored at key is not a string"),
+			}
 		}
-		return resp.RespValue{Type: "bulk", Bulk: v.Str}
+		return handlerResponse{
+			resp: generateBulkResponse(v.Str),
+		}
 	}
 
-	return resp.RespValue{Type: "string", Str: "OK"}
+	return handlerResponse{
+		resp: generateStringResponse("OK"),
+	}
 }
 
-func get(h handlerArgs) resp.RespValue {
+func get(h handlerArgs) handlerResponse {
 	if len(h.args) != 1 {
-		return generateErrorResponse(fmt.Errorf("wrong number of arguments for 'get' command"))
+		return handlerResponse{
+			err: fmt.Errorf("wrong number of arguments for 'get' command"),
+		}
 	}
 
 	key := h.args[0].Bulk
@@ -83,32 +104,46 @@ func get(h handlerArgs) resp.RespValue {
 	v, exists, err := h.store.GetByKey(kv)
 
 	if err != nil {
-		return generateErrorResponse(err)
+		return handlerResponse{
+			err: err,
+		}
 	}
 
 	if !exists {
-		return resp.RespValue{Type: "null"}
+		return handlerResponse{
+			resp: generateNullResponse(),
+		}
 	}
 
 	now := int(time.Now().Unix()) * 1000
 
 	if v.Exp > 0 && v.Exp < now {
 		if _, err := h.store.DeleteByKey(kv); err != nil {
-			return generateErrorResponse(err)
+			return handlerResponse{
+				err: err,
+			}
 		}
-		return resp.RespValue{Type: "null"}
+		return handlerResponse{
+			resp: generateNullResponse(),
+		}
 	}
 
 	if v.Typ != STRING {
-		return generateErrorResponse(fmt.Errorf("value stored at key is not a string"))
+		return handlerResponse{
+			err: fmt.Errorf("value stored at key is not a string"),
+		}
 	}
 
-	return resp.RespValue{Type: "bulk", Bulk: v.Str}
+	return handlerResponse{
+		resp: generateBulkResponse(v.Str),
+	}
 }
 
-func del(h handlerArgs) resp.RespValue {
+func del(h handlerArgs) handlerResponse {
 	if len(h.args) == 0 {
-		return generateErrorResponse(fmt.Errorf("no keys passed to 'del' command"))
+		return handlerResponse{
+			err: fmt.Errorf("no keys passed to 'del' command"),
+		}
 	}
 
 	count := 0
@@ -116,7 +151,9 @@ func del(h handlerArgs) resp.RespValue {
 		dc, err := h.store.DeleteByKey(storage.KV{Key: k.Bulk})
 
 		if err != nil {
-			return generateErrorResponse(err)
+			return handlerResponse{
+				err: err,
+			}
 		}
 
 		if dc == 1 {
@@ -124,12 +161,16 @@ func del(h handlerArgs) resp.RespValue {
 		}
 	}
 
-	return resp.RespValue{Type: "integer", Num: count}
+	return handlerResponse{
+		resp: generateIntegerResponse(count),
+	}
 }
 
-func copy(h handlerArgs) resp.RespValue {
+func copy(h handlerArgs) handlerResponse {
 	if len(h.args) == 0 {
-		return generateErrorResponse(fmt.Errorf("wrong number of commands passed to 'copy' command"))
+		return handlerResponse{
+			err: fmt.Errorf("wrong number of commands passed to 'copy' command"),
+		}
 	}
 
 	key := h.args[0].Bulk
@@ -138,25 +179,35 @@ func copy(h handlerArgs) resp.RespValue {
 
 	current, oldExists, err := h.store.GetByKey(storage.KV{Key: key})
 	if err != nil {
-		return generateErrorResponse(err)
+		return handlerResponse{
+			err: err,
+		}
 	}
 
 	_, newExists, err := h.store.GetByKey(storage.KV{Key: newKey})
 	if err != nil {
-		return generateErrorResponse(err)
+		return handlerResponse{
+			err: err,
+		}
 	}
 
 	if !oldExists || newExists {
-		return resp.RespValue{Type: "integer", Num: 0}
+		return handlerResponse{
+			resp: generateIntegerResponse(0),
+		}
 	}
 
 	current.Key = newKey
 	h.store.SetKV(current)
 	if o.replace {
 		if _, err := h.store.DeleteByKey(storage.KV{Key: key}); err != nil {
-			return generateErrorResponse(err)
+			return handlerResponse{
+				err: err,
+			}
 		}
 	}
 
-	return resp.RespValue{Type: "integer", Num: 1}
+	return handlerResponse{
+		resp: generateIntegerResponse(1),
+	}
 }

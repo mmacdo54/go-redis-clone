@@ -2,6 +2,17 @@ package resp
 
 import "strconv"
 
+const (
+	TYPE_ARRAY   = "array"
+	TYPE_INTEGER = "integer"
+	TYPE_BULK    = "bulk"
+	TYPE_ERROR   = "error"
+	TYPE_STRING  = "string"
+	TYPE_NULL    = "null"
+	TYPE_SET     = "set"
+	TYPE_VOID    = "void"
+)
+
 type RespValue struct {
 	Type  string
 	Str   string
@@ -16,19 +27,19 @@ func NewRespValue() *RespValue {
 
 func (v RespValue) Marshall() []byte {
 	switch v.Type {
-	case "array":
+	case TYPE_ARRAY:
 		return v.marshalArray()
-	case "bulk":
+	case TYPE_BULK:
 		return v.marshalBulk()
-	case "error":
+	case TYPE_ERROR:
 		return v.marshalError()
-	case "integer":
+	case TYPE_INTEGER:
 		return v.marshalInteger()
-	case "string":
+	case TYPE_STRING:
 		return v.marshalString()
-	case "null":
+	case TYPE_NULL:
 		return v.marshalNull()
-	case "set":
+	case TYPE_SET:
 		return v.marshallSet()
 	default:
 		return []byte{}

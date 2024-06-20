@@ -53,18 +53,15 @@ func sendMessageToChannel(channel string, message resp.RespValue) resp.RespValue
 	}
 	wg.Wait()
 
-	return resp.RespValue{Type: "integer", Num: len(connections)}
+	return generateIntegerResponse(len(connections))
 }
 
 func createSubMessage(channel string) resp.RespValue {
-	return resp.RespValue{
-		Type: "array",
-		Array: []resp.RespValue{
-			{Type: "bulk", Bulk: "subscribe"},
-			{Type: "bulk", Bulk: channel},
-			{Type: "integer", Num: 1},
-		},
-	}
+	return generateArrayResponse([]resp.RespValue{
+		generateBulkResponse("subscribe"),
+		generateBulkResponse(channel),
+		generateIntegerResponse(1),
+	})
 }
 
 func sendSubMessages(channels []string) {
@@ -75,14 +72,11 @@ func sendSubMessages(channels []string) {
 }
 
 func createUnsubMessage(channel string) resp.RespValue {
-	return resp.RespValue{
-		Type: "array",
-		Array: []resp.RespValue{
-			{Type: "bulk", Bulk: "unsubscribe"},
-			{Type: "bulk", Bulk: channel},
-			{Type: "integer", Num: 1},
-		},
-	}
+	return generateArrayResponse([]resp.RespValue{
+		generateBulkResponse("unsubscribe"),
+		generateBulkResponse(channel),
+		generateIntegerResponse(1),
+	})
 }
 
 func sendUnsubMessages(channels []string) {
@@ -111,9 +105,11 @@ func removeFromChannels(conn *net.Conn, channels []string) {
 	}
 }
 
-func subscribe(h handlerArgs) resp.RespValue {
+func subscribe(h handlerArgs) handlerResponse {
 	if len(h.args) == 0 {
-		return generateErrorResponse(fmt.Errorf("'subscribe' command needs at least one channel"))
+		return handlerResponse{
+			err: fmt.Errorf("'subscribe' command needs at least one channel"),
+		}
 	}
 
 	channels := []string{}
@@ -133,10 +129,12 @@ func subscribe(h handlerArgs) resp.RespValue {
 
 	sendSubMessages(channels)
 
-	return resp.RespValue{Type: "void"}
+	return handlerResponse{
+		resp: generateVoidResponse(),
+	}
 }
 
-func unsubscribe(h handlerArgs) resp.RespValue {
+func unsubscribe(h handlerArgs) handlerResponse {
 	unsubChannels := []string{}
 	if len(h.args) == 0 {
 		unsubChannels = append(unsubChannels, getAllChannels()...)
@@ -148,24 +146,27 @@ func unsubscribe(h handlerArgs) resp.RespValue {
 
 	removeFromChannels(h.conn, unsubChannels)
 
-	return resp.RespValue{Type: "string", Str: "OK"}
+	return handlerResponse{
+		resp: generateStringResponse("OK"),
+	}
 }
 
-func publish(h handlerArgs) resp.RespValue {
+func publish(h handlerArgs) handlerResponse {
 	if len(h.args) != 2 {
-		return generateErrorResponse(fmt.Errorf("wrong number of arguments for 'publish' command"))
+		return handlerResponse{
+			err: fmt.Errorf("wrong number of arguments for 'publish' command"),
+		}
 	}
 
 	channel := h.args[0].Bulk
 	message := h.args[1].Bulk
-	subMessage := resp.RespValue{
-		Type: "array",
-		Array: []resp.RespValue{
-			{Type: "bulk", Bulk: "message"},
-			{Type: "bulk", Bulk: channel},
-			{Type: "bulk", Bulk: message},
-		},
-	}
+	subMessage := generateArrayResponse([]resp.RespValue{
+		generateBulkResponse("message"),
+		generateBulkResponse(channel),
+		generateBulkResponse(message),
+	})
 
-	return sendMessageToChannel(channel, subMessage)
+	return handlerResponse{
+		resp: sendMessageToChannel(channel, subMessage),
+	}
 }
