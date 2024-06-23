@@ -16,7 +16,6 @@ func main() {
 		fmt.Println(err)
 		panic(err)
 	}
-	defer store.Close()
 
 	l, err := net.Listen("tcp", ":6379")
 	if err != nil {
