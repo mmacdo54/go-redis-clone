@@ -33,7 +33,7 @@ func sadd(h handlerArgs) handlerResponse {
 	if !ok {
 		s.Key = key
 		s.Typ = SET
-		s.Set = map[string]struct{}{}
+		s.Set = map[string]interface{}{}
 	}
 
 	count := 0
