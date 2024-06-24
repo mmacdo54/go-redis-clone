@@ -8,12 +8,18 @@ import (
 	"github.com/lib/pq"
 )
 
+type Transaction interface {
+	Abort() error
+	Commit() error
+}
+
 type Store interface {
 	init() error
 	Exists(KV) (bool, error)
 	GetByKey(KV) (KV, bool, error)
-	SetKV(KV) error
-	DeleteByKey(KV) (int, error)
+	SetKV(KV, Transaction) error
+	DeleteByKey(KV, Transaction) (int, error)
+	InitTransaction() (Transaction, error)
 }
 
 type JSONB map[string]interface{}

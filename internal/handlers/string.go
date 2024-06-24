@@ -64,7 +64,14 @@ func set(h handlerArgs) handlerResponse {
 		}
 	}
 
-	if err := h.store.SetKV(kv); err != nil {
+	tx, err := h.store.InitTransaction()
+	if err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+
+	if err := h.store.SetKV(kv, tx); err != nil {
 		return handlerResponse{
 			err: err,
 		}
@@ -83,6 +90,12 @@ func set(h handlerArgs) handlerResponse {
 		}
 		return handlerResponse{
 			resp: generateBulkResponse(v.Str),
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return handlerResponse{
+			err: err,
 		}
 	}
 
@@ -118,11 +131,24 @@ func get(h handlerArgs) handlerResponse {
 	now := int(time.Now().Unix()) * 1000
 
 	if v.Exp > 0 && v.Exp < now {
-		if _, err := h.store.DeleteByKey(kv); err != nil {
+		tx, err := h.store.InitTransaction()
+		if err != nil {
 			return handlerResponse{
 				err: err,
 			}
 		}
+		if _, err := h.store.DeleteByKey(kv, tx); err != nil {
+			return handlerResponse{
+				err: err,
+			}
+		}
+
+		if err := tx.Commit(); err != nil {
+			return handlerResponse{
+				err: err,
+			}
+		}
+
 		return handlerResponse{
 			resp: generateNullResponse(),
 		}
@@ -146,9 +172,15 @@ func del(h handlerArgs) handlerResponse {
 		}
 	}
 
+	tx, err := h.store.InitTransaction()
+	if err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
 	count := 0
 	for _, k := range h.args {
-		dc, err := h.store.DeleteByKey(storage.KV{Key: k.Bulk})
+		dc, err := h.store.DeleteByKey(storage.KV{Key: k.Bulk}, tx)
 
 		if err != nil {
 			return handlerResponse{
@@ -158,6 +190,12 @@ func del(h handlerArgs) handlerResponse {
 
 		if dc == 1 {
 			count++
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return handlerResponse{
+			err: err,
 		}
 	}
 
@@ -197,13 +235,30 @@ func copy(h handlerArgs) handlerResponse {
 		}
 	}
 
+	tx, err := h.store.InitTransaction()
+	if err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+
 	current.Key = newKey
-	h.store.SetKV(current)
+	if err := h.store.SetKV(current, tx); err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
 	if o.replace {
-		if _, err := h.store.DeleteByKey(storage.KV{Key: key}); err != nil {
+		if _, err := h.store.DeleteByKey(storage.KV{Key: key}, tx); err != nil {
 			return handlerResponse{
 				err: err,
 			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return handlerResponse{
+			err: err,
 		}
 	}
 

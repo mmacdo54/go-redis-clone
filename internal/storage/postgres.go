@@ -6,6 +6,24 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+type PostgresTransaction struct {
+	tx *gorm.DB
+}
+
+func (t PostgresTransaction) Commit() error {
+	if err := t.tx.Commit().Error; err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t PostgresTransaction) Abort() error {
+	if err := t.tx.Rollback().Error; err != nil {
+		return err
+	}
+	return nil
+}
+
 type PostgresStore struct {
 	database *gorm.DB
 }
@@ -39,6 +57,16 @@ func (s *PostgresStore) Exists(kv KV) (bool, error) {
 	return res.RowsAffected == 1, nil
 }
 
+func (s *PostgresStore) InitTransaction() (Transaction, error) {
+	res := s.database.Begin()
+
+	if res.Error != nil {
+		return PostgresTransaction{}, res.Error
+	}
+
+	return PostgresTransaction{tx: res}, nil
+}
+
 func (s *PostgresStore) GetByKey(kv KV) (KV, bool, error) {
 	keyValue := KV{}
 	res := s.database.Where("key = ?", kv.Key).Limit(1).First(&keyValue)
@@ -54,21 +82,23 @@ func (s *PostgresStore) GetByKey(kv KV) (KV, bool, error) {
 	return keyValue, true, nil
 }
 
-func (s *PostgresStore) SetKV(kv KV) error {
-	if err := s.database.Clauses(clause.OnConflict{
+func (s *PostgresStore) SetKV(kv KV, t Transaction) error {
+	if err := t.(PostgresTransaction).tx.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "key"}},
-		DoUpdates: clause.AssignmentColumns([]string{"arr", "set", "str", "exp"}),
+		DoUpdates: clause.AssignmentColumns([]string{"typ", "arr", "set", "str", "exp"}),
 	}).Create(&kv).Error; err != nil {
+		t.Abort()
 		return err
 	}
 
 	return nil
 }
 
-func (s *PostgresStore) DeleteByKey(kv KV) (int, error) {
-	res := s.database.Where("key = ?", kv.Key).Delete(&KV{})
+func (s *PostgresStore) DeleteByKey(kv KV, t Transaction) (int, error) {
+	res := t.(PostgresTransaction).tx.Where("key = ?", kv.Key).Delete(&KV{})
 
 	if res.Error != nil {
+		t.Abort()
 		return 0, res.Error
 	}
 

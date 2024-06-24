@@ -53,9 +53,22 @@ func lpush(h handlerArgs) handlerResponse {
 		list = append(list, el.Arr...)
 	}
 	el.Arr = list
-	err = h.store.SetKV(el)
+
+	tx, err := h.store.InitTransaction()
+	if err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+	err = h.store.SetKV(el, tx)
 
 	if err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
 		return handlerResponse{
 			err: err,
 		}
@@ -106,9 +119,21 @@ func rpush(h handlerArgs) handlerResponse {
 		el.Arr = append(el.Arr, v.Bulk)
 	}
 
-	err = h.store.SetKV(el)
+	tx, err := h.store.InitTransaction()
+	if err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+	err = h.store.SetKV(el, tx)
 
 	if err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
 		return handlerResponse{
 			err: err,
 		}
@@ -142,9 +167,21 @@ func lpop(h handlerArgs) handlerResponse {
 		}
 	}
 
+	tx, err := h.store.InitTransaction()
+	if err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+
 	now := int(time.Now().Unix()) * 1000
 	if el.Exp > 0 && el.Exp < now {
-		if _, err := h.store.DeleteByKey(el); err != nil {
+		if _, err := h.store.DeleteByKey(el, tx); err != nil {
+			return handlerResponse{
+				err: err,
+			}
+		}
+		if err := tx.Commit(); err != nil {
 			return handlerResponse{
 				err: err,
 			}
@@ -156,17 +193,23 @@ func lpop(h handlerArgs) handlerResponse {
 
 	val := el.Arr[0]
 	if len(el.Arr) == 1 {
-		if _, err := h.store.DeleteByKey(el); err != nil {
+		if _, err := h.store.DeleteByKey(el, tx); err != nil {
 			return handlerResponse{
 				err: err,
 			}
 		}
 	} else {
 		el.Arr = el.Arr[1:]
-		if err := h.store.SetKV(el); err != nil {
+		if err := h.store.SetKV(el, tx); err != nil {
 			return handlerResponse{
 				err: err,
 			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return handlerResponse{
+			err: err,
 		}
 	}
 
@@ -198,9 +241,16 @@ func rpop(h handlerArgs) handlerResponse {
 		}
 	}
 
+	tx, err := h.store.InitTransaction()
+	if err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+
 	now := int(time.Now().Unix()) * 1000
 	if el.Exp > 0 && el.Exp < now {
-		if _, err := h.store.DeleteByKey(el); err != nil {
+		if _, err := h.store.DeleteByKey(el, tx); err != nil {
 			return handlerResponse{
 				err: err,
 			}
@@ -212,17 +262,23 @@ func rpop(h handlerArgs) handlerResponse {
 
 	val := el.Arr[len(el.Arr)-1]
 	if len(el.Arr) == 1 {
-		if _, err := h.store.DeleteByKey(el); err != nil {
+		if _, err := h.store.DeleteByKey(el, tx); err != nil {
 			return handlerResponse{
 				err: err,
 			}
 		}
 	} else {
 		el.Arr = el.Arr[:len(el.Arr)-1]
-		if err := h.store.SetKV(el); err != nil {
+		if err := h.store.SetKV(el, tx); err != nil {
 			return handlerResponse{
 				err: err,
 			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return handlerResponse{
+			err: err,
 		}
 	}
 

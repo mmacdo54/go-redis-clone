@@ -44,7 +44,20 @@ func sadd(h handlerArgs) handlerResponse {
 		}
 	}
 
-	if err := h.store.SetKV(s); err != nil {
+	tx, err := h.store.InitTransaction()
+	if err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+
+	if err := h.store.SetKV(s, tx); err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
 		return handlerResponse{
 			err: err,
 		}

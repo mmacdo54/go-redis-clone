@@ -73,9 +73,22 @@ func setExpiry(h handlerArgs) handlerResponse {
 		}
 	}
 
-	err = h.store.SetKV(v)
+	tx, err := h.store.InitTransaction()
+	if err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+
+	err = h.store.SetKV(v, tx)
 
 	if err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
 		return handlerResponse{
 			err: err,
 		}
@@ -109,7 +122,20 @@ func persist(h handlerArgs) handlerResponse {
 	}
 
 	v.Exp = 0
-	if err = h.store.SetKV(v); err != nil {
+	tx, err := h.store.InitTransaction()
+	if err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+
+	if err = h.store.SetKV(v, tx); err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
 		return handlerResponse{
 			err: err,
 		}
