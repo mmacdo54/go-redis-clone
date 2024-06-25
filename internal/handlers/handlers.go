@@ -44,6 +44,7 @@ var Handlers = map[string]Handler{
 	"LINDEX":      lindex,
 	"SADD":        sadd,
 	"SMEMBERS":    smembers,
+	"SISMEMBER":   sismember,
 	"PERSIST":     persist,
 	"EXPIRE":      setExpiry,
 	"EXPIREAT":    setExpiry,

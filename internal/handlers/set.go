@@ -105,3 +105,37 @@ func smembers(h handlerArgs) handlerResponse {
 		resp: generateSetResponse(members),
 	}
 }
+
+func sismember(h handlerArgs) handlerResponse {
+	if len(h.args) != 2 {
+		return handlerResponse{
+			err: fmt.Errorf("wrong amount of arguments to 'sismember' command"),
+		}
+	}
+
+	key := h.args[0].Bulk
+	value := h.args[1].Bulk
+	s, ok, err := h.store.GetByKey(storage.KV{Key: key})
+
+	if err != nil {
+		return handlerResponse{
+			err: err,
+		}
+	}
+
+	if !ok || s.Typ != SET {
+		return handlerResponse{
+			resp: generateIntegerResponse(0),
+		}
+	}
+
+	if _, exists := s.Set[value]; !exists {
+		return handlerResponse{
+			resp: generateIntegerResponse(0),
+		}
+	}
+
+	return handlerResponse{
+		resp: generateIntegerResponse(1),
+	}
+}
