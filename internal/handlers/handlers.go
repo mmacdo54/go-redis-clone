@@ -2,9 +2,10 @@ package handlers
 
 import (
 	"fmt"
-	"net"
 	"strings"
 
+	"github.com/mmacdo54/go-redis-clone/internal/configuration"
+	"github.com/mmacdo54/go-redis-clone/internal/connection"
 	"github.com/mmacdo54/go-redis-clone/internal/resp"
 	"github.com/mmacdo54/go-redis-clone/internal/storage"
 )
@@ -18,9 +19,10 @@ const (
 
 type handlerArgs struct {
 	args    []resp.RespValue
-	conn    *net.Conn
+	conn    *connection.Connection
 	command string
 	store   storage.Store
+	config  configuration.Config
 }
 type handlerResponse struct {
 	err  error
@@ -29,6 +31,7 @@ type handlerResponse struct {
 type Handler func(handlerArgs) handlerResponse
 
 var Handlers = map[string]Handler{
+	"AUTH":        auth,
 	"EXISTS":      exists,
 	"SET":         set,
 	"GET":         get,
@@ -88,7 +91,7 @@ func generateErrorResponse(err error) resp.RespValue {
 	return resp.RespValue{Type: resp.TYPE_ERROR, Str: fmt.Sprintf("ERR %s", err.Error())}
 }
 
-func HandleRespValue(v resp.RespValue, conn *net.Conn, store storage.Store) resp.RespValue {
+func HandleRespValue(v resp.RespValue, conn *connection.Connection, store storage.Store, config configuration.Config) resp.RespValue {
 	if v.Type != "array" {
 		return generateErrorResponse(fmt.Errorf("Only accept array type"))
 	}
@@ -101,7 +104,11 @@ func HandleRespValue(v resp.RespValue, conn *net.Conn, store storage.Store) resp
 		return generateErrorResponse(fmt.Errorf("Invalid command: %s", command))
 	}
 
-	r := handler(handlerArgs{args: args, conn: conn, command: command, store: store})
+	if command != "AUTH" && !conn.Validated {
+		return generateErrorResponse(fmt.Errorf("Not validated"))
+	}
+
+	r := handler(handlerArgs{args: args, conn: conn, command: command, store: store, config: config})
 
 	if r.err != nil {
 		return generateErrorResponse(r.err)

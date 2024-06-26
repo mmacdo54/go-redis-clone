@@ -120,10 +120,10 @@ func subscribe(h handlerArgs) handlerResponse {
 
 	connectionMutex.Lock()
 	for _, c := range channels {
-		if v, ok := connections[c]; ok && slices.Contains(v, h.conn) {
+		if v, ok := connections[c]; ok && slices.Contains(v, h.conn.Conn) {
 			continue
 		}
-		connections[c] = append(connections[c], h.conn)
+		connections[c] = append(connections[c], h.conn.Conn)
 	}
 	connectionMutex.Unlock()
 
@@ -144,7 +144,7 @@ func unsubscribe(h handlerArgs) handlerResponse {
 		}
 	}
 
-	removeFromChannels(h.conn, unsubChannels)
+	removeFromChannels(h.conn.Conn, unsubChannels)
 
 	return handlerResponse{
 		resp: generateStringResponse("OK"),

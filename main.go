@@ -5,6 +5,8 @@ import (
 	"io"
 	"net"
 
+	"github.com/mmacdo54/go-redis-clone/internal/configuration"
+	"github.com/mmacdo54/go-redis-clone/internal/connection"
 	"github.com/mmacdo54/go-redis-clone/internal/handlers"
 	"github.com/mmacdo54/go-redis-clone/internal/resp"
 	"github.com/mmacdo54/go-redis-clone/internal/storage"
@@ -12,6 +14,12 @@ import (
 
 func main() {
 	store, err := storage.InitStore()
+	if err != nil {
+		fmt.Println(err)
+		panic(err)
+	}
+
+	config, err := configuration.InitConfig()
 	if err != nil {
 		fmt.Println(err)
 		panic(err)
@@ -31,12 +39,17 @@ func main() {
 			continue
 		}
 
-		go handleConnection(conn, store)
+		go handleConnection(conn, store, config)
 	}
 }
 
-func handleConnection(conn net.Conn, store storage.Store) {
+func handleConnection(conn net.Conn, store storage.Store, config configuration.Config) {
 	defer conn.Close()
+	c := connection.NewConnection(&conn)
+	if !config.Requirepass {
+		c.Validated = true
+	}
+
 	for {
 		reader := resp.NewRespReader(conn)
 		writer := resp.NewRespWriter(conn)
@@ -52,7 +65,7 @@ func handleConnection(conn net.Conn, store storage.Store) {
 			}
 		}
 
-		response := handlers.HandleRespValue(val, &conn, store)
+		response := handlers.HandleRespValue(val, &c, store, config)
 
 		if response.Type != resp.TYPE_VOID {
 			writer.WriteResp(response)

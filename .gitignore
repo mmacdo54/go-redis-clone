@@ -21,6 +21,6 @@
 go.work
 go.work.sum
 
-database.aof
-
 /postgres
+
+redis.conf

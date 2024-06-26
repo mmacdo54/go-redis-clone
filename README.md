@@ -11,6 +11,7 @@ A simple to run basic implementation of a Redis server - this is just for a bit 
 
 ## Supported Commands
 Currently supported Redis Commands
+- AUTH (only supports password)
 - SET
 - GET
 - EXISTS
@@ -36,3 +37,8 @@ Currently supported Redis Commands
 - SUBSCRIBE
 - PUBLISH
 - UNSUBSCRIBE
+
+## Config
+Currently config can only be set by using a redis.conf file, the following config options are supported:
+
+- requirepass {password} - must be between 16-128 characters and only special characters (no spaces) are !,&,#,$,^,<,>, and -
