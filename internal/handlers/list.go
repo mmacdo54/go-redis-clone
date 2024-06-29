@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/mmacdo54/go-redis-clone/internal/storage"
 )
@@ -38,12 +37,6 @@ func lpush(h handlerArgs) handlerResponse {
 
 	el.Key = key
 	el.Typ = LIST
-	now := int(time.Now().Unix()) * 1000
-	if el.Exp > 0 && el.Exp < now {
-		el.Arr = []string{}
-		el.Exp = 0
-	}
-
 	list := []string{}
 	for i := len(h.args) - 1; i >= 1; i-- {
 		list = append(list, h.args[i].Bulk)
@@ -109,12 +102,6 @@ func rpush(h handlerArgs) handlerResponse {
 
 	el.Key = key
 	el.Typ = LIST
-	now := int(time.Now().Unix()) * 1000
-	if el.Exp > 0 && el.Exp < now {
-		el.Arr = []string{}
-		el.Exp = 0
-	}
-
 	for _, v := range h.args[1:] {
 		el.Arr = append(el.Arr, v.Bulk)
 	}
@@ -174,23 +161,6 @@ func lpop(h handlerArgs) handlerResponse {
 		}
 	}
 
-	now := int(time.Now().Unix()) * 1000
-	if el.Exp > 0 && el.Exp < now {
-		if _, err := h.store.DeleteByKey(el, tx); err != nil {
-			return handlerResponse{
-				err: err,
-			}
-		}
-		if err := tx.Commit(); err != nil {
-			return handlerResponse{
-				err: err,
-			}
-		}
-		return handlerResponse{
-			resp: generateNullResponse(),
-		}
-	}
-
 	val := el.Arr[0]
 	if len(el.Arr) == 1 {
 		if _, err := h.store.DeleteByKey(el, tx); err != nil {
@@ -245,18 +215,6 @@ func rpop(h handlerArgs) handlerResponse {
 	if err != nil {
 		return handlerResponse{
 			err: err,
-		}
-	}
-
-	now := int(time.Now().Unix()) * 1000
-	if el.Exp > 0 && el.Exp < now {
-		if _, err := h.store.DeleteByKey(el, tx); err != nil {
-			return handlerResponse{
-				err: err,
-			}
-		}
-		return handlerResponse{
-			resp: generateNullResponse(),
 		}
 	}
 

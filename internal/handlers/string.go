@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/mmacdo54/go-redis-clone/internal/storage"
 )
@@ -61,6 +60,8 @@ func set(h handlerArgs) handlerResponse {
 			kv.Exp = opts.exat
 		case opts.pxat > 0:
 			kv.Exp = opts.pxat
+		default:
+			kv.Exp = 0
 		}
 	}
 
@@ -123,32 +124,6 @@ func get(h handlerArgs) handlerResponse {
 	}
 
 	if !exists {
-		return handlerResponse{
-			resp: generateNullResponse(),
-		}
-	}
-
-	now := int(time.Now().Unix()) * 1000
-
-	if v.Exp > 0 && v.Exp < now {
-		tx, err := h.store.InitTransaction()
-		if err != nil {
-			return handlerResponse{
-				err: err,
-			}
-		}
-		if _, err := h.store.DeleteByKey(kv, tx); err != nil {
-			return handlerResponse{
-				err: err,
-			}
-		}
-
-		if err := tx.Commit(); err != nil {
-			return handlerResponse{
-				err: err,
-			}
-		}
-
 		return handlerResponse{
 			resp: generateNullResponse(),
 		}

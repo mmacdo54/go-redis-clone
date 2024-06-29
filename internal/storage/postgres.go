@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"time"
+
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -77,6 +79,22 @@ func (s *PostgresStore) GetByKey(kv KV) (KV, bool, error) {
 
 	if res.RowsAffected == 0 {
 		return keyValue, false, nil
+	}
+
+	now := int(time.Now().Unix()) * 1000
+	if keyValue.Exp > 0 && keyValue.Exp < now {
+		tx, err := s.InitTransaction()
+		if err != nil {
+			return KV{}, false, err
+		}
+		if _, err := s.DeleteByKey(KV{Key: kv.Key}, tx); err != nil {
+			tx.Abort()
+			return KV{}, false, err
+		}
+		if err := tx.Commit(); err != nil {
+			return KV{}, false, err
+		}
+		return KV{}, false, nil
 	}
 
 	return keyValue, true, nil
